@@ -7,6 +7,7 @@ import argparse
 import logging
 import datetime
 import netrc
+import xmltodict
 from lxml import etree as ET
 from email.mime.text import MIMEText
 from smtplib import SMTP                    # use this for standard SMTP protocol (TLS encryption)
@@ -37,7 +38,6 @@ class dcp_manager():
   # Returns the AnnotationText value from the PKL or 0 if there was an error.
   #
   def fetchPKLAssets(self):
-    import xmltodict
     with open(self.pkl) as fd:
       doc = xmltodict.parse(fd.read())
       
@@ -46,6 +46,7 @@ class dcp_manager():
     asset = {}
     asset['id'] = doc['PackingList']['Id']
     asset['file'] = self.pkl
+    asset['size'] = os.path.getsize(self.pkl)
     self.assets.append(asset)
 
     # Loop on each Asset found.
@@ -61,6 +62,11 @@ class dcp_manager():
 
   # -------------------------------
   # Catalog - Prepare an ASSETMAP file for the self.source directory.
+  #
+  # Logic to append data to the existing XML is from
+  # http://stackoverflow.com/questions/3648689/python-lxml-append-a-existing-xml-with-new-data
+  # and from the lxml tutorial at http://lxml.de/tutorial.html.
+  #
   def catalog(self):
     # Check for an ASSETMAP file in self.dest
     if os.path.exists(self.destAssetMap):
@@ -69,7 +75,7 @@ class dcp_manager():
     else:
       self.logger.info("No target " + self.destAssetMap + " found so a new one will be created.")
   
-    self.initAssetMap()     # Initialize a new ASSETMAP
+    self.initAssetMap()     # Initialize a new empty ASSETMAP
     
     # Find all PKL files in the source directory
     pkls = []
@@ -78,11 +84,43 @@ class dcp_manager():
         path = root + "/" + filename
         pkls.append(path)
 
+    # Open self.destAssetMap and find the AssetList tag so we can append new Asset tags to it.
+    tree = ET.parse(self.destAssetMap)
+    root = tree.getroot()
+    assetList = root.xpath("/AssetMap/AssetList")
+
     # Loop on the found PKL files
     for pkl in pkls:
       self.pkl = pkl
       self.assets = []
       package = self.fetchPKLAssets()
+
+      # Open self.destAssetMap and find the AssetList tag so we can append a new package of Asset tags to it.
+      tree = ET.parse(self.destAssetMap)
+      root = tree.getroot()
+      assetList = root.xpath("/AssetMap/AssetList")
+      i = 0
+      asset = []
+
+      # Found a package.  Append its assets info to the assetList in self.destAssetMap.
+      for a in self.assets:
+        asset[i] = ET.SubElement(assetList, "Asset")
+        id = ET.SubElement(asset[i], "Id")
+        id.text = a['id']
+        chunkList = ET.SubElement(asset[i], "Chunklist")
+        chunk = ET.SubElement(chunkList, "Chunk")
+        path = ET.SubElement(chunk, "Path")
+        path.text = "file:///" + a['file']
+        volumeIndex = ET.SubElement(chunk, "VolumeIndex")
+        volumeIndex.text = '1'
+        offset = ET.SubElement(chunk, "Offset")
+        offset.text = '0'
+        length = ET.SubElement(chunk, "Length")
+        length.text = a['size']
+        i += 1
+      
+      # Update the ASSETMAP file before the next PKL is addressed
+      tree.write(self.destAssetMap)
 
       
   #------------------------------
