@@ -96,15 +96,16 @@ class dcp_manager():
         
         # First, determine if the file exists...
         if 'file' in a:
+          filename = self.remove_prefix(a['file'], self.source + "/")
           if not os.path.isfile(a['file']):
-            self.logger.warning("File " + a['file'] + ", part of " + package + ", was NOT found.")
+            self.logger.warning("File " + filename + ", part of " + package + ", was NOT found.")
           else:
             aCount += 1
             asset = ET.SubElement(assetList, "Asset")
             ET.SubElement(asset, "Id").text = a['id']
             chunkList = ET.SubElement(asset, "Chunklist")
             chunk = ET.SubElement(chunkList, "Chunk")
-            ET.SubElement(chunk, "Path").text = a['file']
+            ET.SubElement(chunk, "Path").text = filename
             ET.SubElement(chunk, "VolumeIndex").text = '1'
             ET.SubElement(chunk, "Length").text = str(a['size'])
       
@@ -261,6 +262,14 @@ class dcp_manager():
       if self.mail:
         self.send_mail(self.mail, self.logfile, 1, msg)
         exit(1)
+
+
+  #---------------------------------
+  # Function to return a string minus some prefix
+  def remove_prefix(self, text, prefix):
+    if text.startswith(prefix):
+      return text[len(prefix):]
+    return text
 
 
   # -------------------------------
