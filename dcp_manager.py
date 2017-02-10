@@ -82,6 +82,7 @@ class dcp_manager():
     pCount = 0    # number of packages
     aCount = 0    # number of assets found (the files exist)
     aTotal = 0    # total number of assets identifed
+    pSkip  = 0    # number of packages skipped (due to missing assets)
 
     # Loop on the found PKL files
     for pkl in pkls:
@@ -89,37 +90,48 @@ class dcp_manager():
       self.assets = []
       package = self.fetchPKLAssets()
       pCount += 1
+      missing = 0
 
-      # Found a package.  Append its assets info to the assetList in self.destAssetMap.
+      # Found a package.  Determine if all of its assets are present.
       for a in self.assets:
         aTotal += 1
-        
         # First, determine if the file exists...
-        if 'file' in a:
+        if a['file'] == 'None':
+          missing += 1
+        elif not os.path.isfile(self.source + "/" + a['file']):
+          missing += 1
           filename = self.remove_prefix(a['file'], self.source + "/")
-          if not os.path.isfile(a['file']):
-            self.logger.warning("File " + filename + ", part of " + package + ", was NOT found.")
-          else:
-            aCount += 1
-            asset = ET.SubElement(assetList, "Asset")
-            ET.SubElement(asset, "Id").text = a['id']
-            chunkList = ET.SubElement(asset, "Chunklist")
-            chunk = ET.SubElement(chunkList, "Chunk")
-            ET.SubElement(chunk, "Path").text = filename
-            ET.SubElement(chunk, "VolumeIndex").text = '1'
-            ET.SubElement(chunk, "Length").text = str(a['size'])
+          self.logger.warning("File " + filename + ", part of " + package + ", was NOT found.")
+
+      # If assets are missing, skip the package.
+      if missing > 2:
+        self.logger.warning("Package '" + package + "' is missing " + str(missing) + " element(s) and has been omitted from the catalog.")
+        pSkip += 1
+  
+      # Loop again and catalog the complete package
+      else:
+        for a in self.assets:
+          filename = self.remove_prefix(a['file'], self.source + "/")
+          aCount += 1
+          asset = ET.SubElement(assetList, "Asset")
+          ET.SubElement(asset, "Id").text = a['id']
+          chunkList = ET.SubElement(asset, "Chunklist")
+          chunk = ET.SubElement(chunkList, "Chunk")
+          ET.SubElement(chunk, "Path").text = filename
+          ET.SubElement(chunk, "VolumeIndex").text = '1'
+          ET.SubElement(chunk, "Length").text = str(a['size'])
       
-            # Update the ASSETMAP file after each asset is added
-            xml = ET.ElementTree(root)
-            xml.write(self.destAssetMap, pretty_print=True, xml_declaration=True)
-        
+          # Update the ASSETMAP file after each asset is added
+          xml = ET.ElementTree(root)
+          xml.write(self.destAssetMap, pretty_print=True, xml_declaration=True)
+
     parser = ET.XMLParser(remove_blank_text=True)
     tree = ET.parse(self.destAssetMap, parser)
     print ET.tostring(tree, pretty_print=True, xml_declaration=True)
     print ""
 
-    self.logger.info("CATALOG operation is complete with " + str(pCount) + " packages and " + str(aCount) + " of " +
-                     str(aTotal) + " possible assets found.")
+    self.logger.info("CATALOG operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
+                      str(aCount) + " of " + str(aTotal) + " possible assets found.")
 
 
   # --------------------------------
