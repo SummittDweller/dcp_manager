@@ -98,7 +98,7 @@ class dcp_manager():
         # First, determine if the file exists...
         if a['file'] == 'None':
           missing += 1
-        elif not os.path.isfile(self.source + "/" + a['file']):
+        elif not os.path.isfile(self.source + "/" + a['file']):    # @TODO...assumes the asset is in the same directory as ASSETMAP
           missing += 1
           filename = self.remove_prefix(a['file'], self.source + "/")
           self.logger.warning("File " + filename + ", part of " + package + ", was NOT found.")
