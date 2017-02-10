@@ -51,7 +51,7 @@ class dcp_manager():
 
 
   # -------------------------------
-  # Catalog - Prepare an ASSETMAP file for the self.source directory.
+  # Catalog - Prepare an ASSETMAP file reflecting contents of the self.source directory.
   #
   # Logic to append data to the existing XML is from
   # http://stackoverflow.com/questions/3648689/python-lxml-append-a-existing-xml-with-new-data
@@ -79,29 +79,46 @@ class dcp_manager():
     root = tree.getroot()
     assetList = ET.SubElement(root, 'AssetList')
 
+    pCount = 0
+    aCount = 0
+    aTotal = 0
+
     # Loop on the found PKL files
     for pkl in pkls:
       self.pkl = pkl
       self.assets = []
       package = self.fetchPKLAssets()
+      pCount += 1
 
       # Found a package.  Append its assets info to the assetList in self.destAssetMap.
       for a in self.assets:
-        asset = ET.SubElement(assetList, "Asset")
-        ET.SubElement(asset, "Id").text = a['id']
-        chunkList = ET.SubElement(asset, "Chunklist")
-        chunk = ET.SubElement(chunkList, "Chunk")
-        ET.SubElement(chunk, "Path").text = a['file']
-        ET.SubElement(chunk, "VolumeIndex").text = '1'
-        ET.SubElement(chunk, "Length").text = str(a['size'])
+        aTotal += 1
+        
+        # First, determine if the file exists...
+        if 'file' in a:
+          if not os.path.isfile(a['file']):
+            self.logger.warning("File " + a['file'] + ", part of " + package + ", was NOT found.")
+          else:
+            aCount += 1
+            asset = ET.SubElement(assetList, "Asset")
+            ET.SubElement(asset, "Id").text = a['id']
+            chunkList = ET.SubElement(asset, "Chunklist")
+            chunk = ET.SubElement(chunkList, "Chunk")
+            ET.SubElement(chunk, "Path").text = a['file']
+            ET.SubElement(chunk, "VolumeIndex").text = '1'
+            ET.SubElement(chunk, "Length").text = str(a['size'])
       
-        # Update the ASSETMAP file after each asset is added
-        xml = ET.ElementTree(root)
-        xml.write(self.destAssetMap, pretty_print=True, xml_declaration=True)
-
+            # Update the ASSETMAP file after each asset is added
+            xml = ET.ElementTree(root)
+            xml.write(self.destAssetMap, pretty_print=True, xml_declaration=True)
+        
     parser = ET.XMLParser(remove_blank_text=True)
     tree = ET.parse(self.destAssetMap, parser)
     print ET.tostring(tree, pretty_print=True, xml_declaration=True)
+    print ""
+
+    self.logger.info("CATALOG operation is complete with " + str(pCount) + " packages and " + str(aCount) + " of " +
+                     str(aTotal) + " possible assets found.")
 
 
   # --------------------------------
