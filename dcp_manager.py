@@ -79,9 +79,9 @@ class dcp_manager():
     root = tree.getroot()
     assetList = ET.SubElement(root, 'AssetList')
 
-    pCount = 0
-    aCount = 0
-    aTotal = 0
+    pCount = 0    # number of packages
+    aCount = 0    # number of assets found (the files exist)
+    aTotal = 0    # total number of assets identifed
 
     # Loop on the found PKL files
     for pkl in pkls:
