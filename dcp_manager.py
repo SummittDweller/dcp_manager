@@ -24,41 +24,31 @@ class dcp_manager():
   A logfile and a mail can be specified to be informed about operations.
   """
 
-  #--------------------------------
-  # fetchPKLAssets
-  #
-  # Fetch the list of assets from a PKL file.  Logic is lifted from
-  # http://docs.python-guide.org/en/latest/scenarios/xml/.
-  #
-  # self.pkl - The PKL filename.
-  # self.packageName - Returned string containing the PKL AnnotationText as the pacakge name.
-  # self.assets - Returned array of assets found. Each asset is another array with an index equal to its 'id',
-  # a 'file' component and optional 'annotation'. Note that the PKL file itself MUST be prepended to the list of assets!
-  #
-  # Returns the AnnotationText value from the PKL or 0 if there was an error.
-  #
-  def fetchPKLAssets(self):
-    with open(self.pkl) as fd:
-      doc = xmltodict.parse(fd.read())
-      
-    # Save the AnnotationText as self.packageName and prepend the PKL itself to the list of assets.
-    self.packageName = doc['PackingList']['AnnotationText']
-    asset = {}
-    asset['id'] = doc['PackingList']['Id']
-    asset['file'] = self.pkl
-    asset['size'] = os.path.getsize(self.pkl)
-    self.assets.append(asset)
 
-    # Loop on each Asset found.
-    for aList in doc['PackingList']['AssetList']['Asset']:
-      asset = {}
-      asset['id'] = aList['Id']
-      asset['size'] = aList['Size']
-      asset['file'] = aList['OriginalFileName']
-      self.assets.append(asset)
+  # -------------------------------
+  # Perform the specified OPERATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  def main(self):
+    self.parse_args()
+    self.return_value = 0
+    if self.logfile:
+      self.logger.info("Saving " + self.op + " operation logfile to " + self.logfile + ".")
+    else:
+      self.logger.info("Starting " + self.op + " operation without a logfile.")
   
-    return self.packageName
-    
+    # The operation switch...
+    if self.op.lower() == 'catalog':
+      out = self.catalog()
+    else:
+      msg = "The specifed '" + self.op + "' is NOT supported.  Exiting..."
+      self.logger.info(msg)
+      if self.mail:
+        self.send_mail(self.mail, self.logfile, 400, msg)
+      exit(1)
+  
+    self.logger.info("Operation " + self.op + " is complete with a return code " + str(self.return_value) + ".")
+    if self.mail:
+      self.send_mail(self.mail, self.logfile, self.return_value, out)
+
 
   # -------------------------------
   # Catalog - Prepare an ASSETMAP file for the self.source directory.
@@ -84,10 +74,10 @@ class dcp_manager():
         path = root + "/" + filename
         pkls.append(path)
 
-    # Open self.destAssetMap and find the AssetList tag so we can append new Asset tags to it.
+    # Open self.destAssetMap and append the AssetList tag
     tree = ET.parse(self.destAssetMap)
     root = tree.getroot()
-    assetList = root.xpath("/AssetMap/AssetList")
+    assetList = ET.SubElement(root, 'AssetList')
 
     # Loop on the found PKL files
     for pkl in pkls:
@@ -95,48 +85,72 @@ class dcp_manager():
       self.assets = []
       package = self.fetchPKLAssets()
 
-      # Open self.destAssetMap and find the AssetList tag so we can append a new package of Asset tags to it.
-      tree = ET.parse(self.destAssetMap)
-      root = tree.getroot()
-      assetList = root.xpath("/AssetMap/AssetList")
-      i = 0
-      asset = []
-
       # Found a package.  Append its assets info to the assetList in self.destAssetMap.
       for a in self.assets:
-        asset[i] = ET.SubElement(assetList, "Asset")
-        id = ET.SubElement(asset[i], "Id")
-        id.text = a['id']
-        chunkList = ET.SubElement(asset[i], "Chunklist")
+        asset = ET.SubElement(assetList, "Asset")
+        ET.SubElement(asset, "Id").text = a['id']
+        chunkList = ET.SubElement(asset, "Chunklist")
         chunk = ET.SubElement(chunkList, "Chunk")
-        path = ET.SubElement(chunk, "Path")
-        path.text = "file:///" + a['file']
-        volumeIndex = ET.SubElement(chunk, "VolumeIndex")
-        volumeIndex.text = '1'
-        offset = ET.SubElement(chunk, "Offset")
-        offset.text = '0'
-        length = ET.SubElement(chunk, "Length")
-        length.text = a['size']
-        i += 1
+        ET.SubElement(chunk, "Path").text = a['file']
+        ET.SubElement(chunk, "VolumeIndex").text = '1'
+        ET.SubElement(chunk, "Length").text = str(a['size'])
       
-      # Update the ASSETMAP file before the next PKL is addressed
-      tree.write(self.destAssetMap)
+        # Update the ASSETMAP file after each asset is added
+        xml = ET.ElementTree(root)
+        xml.write(self.destAssetMap, pretty_print=True, xml_declaration=True)
 
-      
+    parser = ET.XMLParser(remove_blank_text=True)
+    tree = ET.parse(self.destAssetMap, parser)
+    print ET.tostring(tree, pretty_print=True, xml_declaration=True)
+
+
+  # --------------------------------
+  # fetchPKLAssets
+  #
+  # Fetch the list of assets from a PKL file.  Logic is lifted from
+  # http://docs.python-guide.org/en/latest/scenarios/xml/.
+  #
+  # self.pkl - The PKL filename.
+  # self.packageName - Returned string containing the PKL AnnotationText as the pacakge name.
+  # self.assets - Returned array of assets found. Each asset is another array with an index equal to its 'id',
+  # a 'file' component and optional 'annotation'. Note that the PKL file itself MUST be prepended to the list of assets!
+  #
+  # Returns the AnnotationText value from the PKL or 0 if there was an error.
+  #
+  def fetchPKLAssets(self):
+    with open(self.pkl) as fd:
+      doc = xmltodict.parse(fd.read())
+  
+    # Save the AnnotationText as self.packageName and prepend the PKL itself to the list of assets.
+    self.packageName = doc['PackingList']['AnnotationText']
+    asset = {}
+    asset['id'] = doc['PackingList']['Id']
+    asset['file'] = self.pkl
+    asset['size'] = os.path.getsize(self.pkl)
+    self.assets.append(asset)
+  
+    # Loop on each Asset found.
+    for aList in doc['PackingList']['AssetList']['Asset']:
+      asset = {}
+      asset['id'] = aList['Id']             # This must exist!
+      asset['size'] = aList['Size']         # This must exist!
+      if 'OriginalFileName' in aList:
+        asset['file'] = aList['OriginalFileName']
+      else:
+        asset['file'] = 'None'
+      self.assets.append(asset)
+  
+    return self.packageName
+
+
   #------------------------------
   def initAssetMap(self):
     root = ET.Element('AssetMap')
-    annotationText = ET.SubElement(root, 'AnnotationText')
-    annotationText.text = 'DCP Manager Build ' + self.date
-    volumeCount = ET.SubElement(root, 'VolumeCount')
-    volumeCount.text = '1'
-    issueDate = ET.SubElement(root, 'IssueDate')
-    issueDate.text = self.date
-    issuer = ET.SubElement(root, 'Issuer')
-    issuer.text = 'Mark McFate'
-    creator = ET.SubElement(root, 'Creator')
-    creator.text = 'DCP Manager'
-    assetList = ET.SubElement(root, 'AssetList')
+    ET.SubElement(root, 'AnnotationText').text = 'DCP Manager Build ' + self.date
+    ET.SubElement(root, 'VolumeCount').text = '1'
+    ET.SubElement(root, 'IssueDate').text = self.date
+    ET.SubElement(root, 'Issuer').text = 'Mark McFate'
+    ET.SubElement(root, 'Creator').text = 'DCP Manager'
     # print ET.tostring(root, pretty_print=True, xml_declaration=True)
     xml = ET.ElementTree(root)
     xml.write(self.destAssetMap, pretty_print=True, xml_declaration=True)
@@ -154,6 +168,7 @@ class dcp_manager():
     if auth:
       self.SMTPUser = auth[0]
       self.SMTPPassword = auth[2]
+
 
   #-------------------------------
   def parse_args(self):
@@ -230,6 +245,7 @@ class dcp_manager():
         self.send_mail(self.mail, self.logfile, 1, msg)
         exit(1)
 
+
   # -------------------------------
   # Function to determine if a directory exists
   def check_dir_exist(self, os_dir):
@@ -239,6 +255,7 @@ class dcp_manager():
     else:
       self.logger.warning("{} does not exist.".format(os_dir))
       return False
+
 
   #-------------------------------
   # Mail mit Log senden
@@ -275,31 +292,6 @@ class dcp_manager():
         self.logger.error("Sending mail failed! Error: %s." % e)
       finally:
         self.conn.close()
-
-
-  #-------------------------------
-  # Perform the specified OPERATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  def main(self):
-    self.parse_args()
-    self.return_value = 0
-    if self.logfile:
-      self.logger.info("Saving " + self.op + " operation logfile to " + self.logfile + ".")
-    else:
-      self.logger.info("Starting " + self.op + " operation without a logfile.")
-      
-    # The operation switch...
-    if self.op.lower() == 'catalog':
-      out = self.catalog()
-    else:
-      msg = "The specifed '" + self.op + "' is NOT supported.  Exiting..."
-      self.logger.info(msg)
-      if self.mail:
-        self.send_mail(self.mail, self.logfile, 400, msg)
-      exit(1)
-      
-    self.logger.info("Operation " + self.op + " is complete with a return code " + str(self.return_value) + ".")
-    if self.mail:
-      self.send_mail(self.mail, self.logfile, self.return_value, out)
 
 
 # -------------------------------
