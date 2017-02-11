@@ -95,16 +95,17 @@ class dcp_manager():
       # Found a package.  Determine if all of its assets are present.
       for a in self.assets:
         aTotal += 1
+        filename = a['file']
+        target = self.source + "/" + filename  # @TODO...assumes the asset is in self.source directory
         # First, determine if the file exists...
-        if a['file'] == 'None':
+        if filename == 'None':
           missing += 1
-        elif not os.path.isfile(self.source + "/" + a['file']):    # @TODO...assumes the asset is in the same directory as ASSETMAP
+        elif not os.path.isfile(target):
           missing += 1
-          filename = self.remove_prefix(a['file'], self.source + "/")
-          self.logger.warning("File " + filename + ", part of " + package + ", was NOT found.")
+          self.logger.warning("File " + target + ", part of " + package + ", was NOT found.")
 
       # If assets are missing, skip the package.
-      if missing > 2:
+      if missing > 0:
         self.logger.warning("Package '" + package + "' is missing " + str(missing) + " element(s) and has been omitted from the catalog.")
         pSkip += 1
   
@@ -155,7 +156,7 @@ class dcp_manager():
     self.packageName = doc['PackingList']['AnnotationText']
     asset = {}
     asset['id'] = doc['PackingList']['Id']
-    asset['file'] = self.pkl
+    asset['file'] = self.remove_prefix(self.pkl, self.source + '/')
     asset['size'] = os.path.getsize(self.pkl)
     self.assets.append(asset)
   
