@@ -206,8 +206,8 @@ class dcp_manager():
     # Parse arguments
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("OPERATION", help="Specify the DCP Manager operation to perform.")
-    parser.add_argument("-s", "--source", help="Specify the directory to perform OPERATION on.  Default is /Volumes/TRAILERS/")
-    parser.add_argument("-d", "--destination", help="Specify the destination directory of the OPERATION.  Default is /tmp")
+    parser.add_argument("-s", "--source", help="Specify the directory to perform OPERATION on.  Default is /tmp")
+    parser.add_argument("-d", "--destination", help="Specify the destination directory of the OPERATION.  Default is /Volumes/Trailers")
     parser.add_argument("-m", "--mail", help="eMail address where the log file will be sent.  Default is toledowieting@gmail.com")
     parser.add_argument("-l", "--logfile", help="Specify the logfile to record opeartion activity.  Default is /tmp/dcp_manger.log")
     parser.add_argument("--debug", help="Toggle debug output ON.  Default is OFF")
@@ -216,11 +216,11 @@ class dcp_manager():
     # Define variables
     self.op = args.OPERATION
     if not args.source:
-      self.source = "/Volumes/TRAILERS"
+      self.source = "/tmp"
     else:
       self.source = args.source
     if not args.destination:
-      self.dest = "/tmp"
+      self.dest = "/Volumes/Trailers"
     else:
       self.dest = args.destination
     if not args.mail:
