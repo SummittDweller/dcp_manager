@@ -47,6 +47,8 @@ class dcp_manager():
     # The operation switch...
     if self.op.lower() == 'catalog':
       out = self.catalog()
+    elif self.op.lower() == 'copy':
+      out = self.copy()
     else:
       msg = "The specifed '" + self.op + "' is NOT supported.  Exiting..."
       self.logger.info(msg)
@@ -173,6 +175,8 @@ class dcp_manager():
       aTotal = 0  # total number of assets identifed
       pSkip = 0  # number of packages skipped (due to missing assets)
 
+      self.destAssetMap = "/tmp/ASSETMAP"
+
       # Loop on the found PKL files
       for pkl in pkls:
           self.pkl = pkl
@@ -225,17 +229,8 @@ class dcp_manager():
                   xml = etree.ElementTree(root)
                   xml.write(self.destAssetXML, pretty_print=True, xml_declaration=True)
 
-      parser = etree.XMLParser(remove_blank_text=True)
-      tree = etree.parse(self.destAssetXML, parser)
-      print etree.tostring(tree, pretty_print=True, xml_declaration=True)
-      print ""
-
-      # Pretty print the output per http://stackoverflow.com/questions/33567245/run-console-command-with-python
-      with open(self.destAssetMap, 'w') as outfile:
-          subprocess.call(["xmllint", "--format", self.destAssetXML], stdout=outfile)
-
       self.logger.info(
-          "CATALOG operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
+          "COPY operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
           str(aCount) + " of " + str(aTotal) + " possible assets found.")
 
 
