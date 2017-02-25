@@ -24,6 +24,13 @@ class dcp_manager():
   A logfile and a mail can be specified to be informed about operations.
   """
 
+  # ------------------------------
+  # Constants
+  SOURCE = "/mnt/trailers"
+  DESTINATION = "/tmp"
+  MAIL = "toledowieting@gmail.com"
+  LOGFILE = "/tmp/dcp_manger.log"
+  DEBUG = False
 
   # -------------------------------
   # Perform the specified OPERATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -206,33 +213,33 @@ class dcp_manager():
     # Parse arguments
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("OPERATION", help="Specify the DCP Manager operation to perform.")
-    parser.add_argument("-s", "--source", help="Specify the directory to perform OPERATION on.  Default is /tmp")
-    parser.add_argument("-d", "--destination", help="Specify the destination directory of the OPERATION.  Default is /Volumes/Trailers")
-    parser.add_argument("-m", "--mail", help="eMail address where the log file will be sent.  Default is toledowieting@gmail.com")
-    parser.add_argument("-l", "--logfile", help="Specify the logfile to record opeartion activity.  Default is /tmp/dcp_manger.log")
+    parser.add_argument("-s", "--source", help="Specify the directory to perform OPERATION on.  Default is " + self.SOURCE)
+    parser.add_argument("-d", "--destination", help="Specify the destination directory of the OPERATION.  Default is " + self.DESTINATION)
+    parser.add_argument("-m", "--mail", help="eMail address where the log file will be sent.  Default is " + self.MAIL)
+    parser.add_argument("-l", "--logfile", help="Specify the logfile to record opeartion activity.  Default is " + self.LOGFILE)
     parser.add_argument("--debug", help="Toggle debug output ON.  Default is OFF")
     args = parser.parse_args()
 
     # Define variables
     self.op = args.OPERATION
     if not args.source:
-      self.source = "/tmp"
+      self.source = self.SOURCE
     else:
       self.source = args.source
     if not args.destination:
-      self.dest = "/Volumes/Trailers"
+      self.dest = self.DESTINATION
     else:
       self.dest = args.destination
     if not args.mail:
-      self.mail = "toledowieting@gmail.com"
+      self.mail = self.MAIL
     else:
       self.mail = args.mail
     if not args.logfile:
-      self.logfile = "/tmp/dcp_manger.log"
+      self.logfile = self.LOGFILE
     else:
       self.logfile = args.logfile
     if not args.debug:
-      self.debug = False
+      self.debug = self.DEBUG
     else:
       self.debug = True
 
