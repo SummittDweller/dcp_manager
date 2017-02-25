@@ -8,11 +8,11 @@ import logging
 import datetime
 import netrc
 import xmltodict
-from lxml import etree as ET
+import re
+import subprocess
+from lxml import etree
 from email.mime.text import MIMEText
 from smtplib import SMTP                    # use this for standard SMTP protocol (TLS encryption)
-from email.MIMEText import MIMEText
-
 
 # -------------------------------
 class dcp_manager():
@@ -27,10 +27,12 @@ class dcp_manager():
   # ------------------------------
   # Constants
   SOURCE = "/mnt/trailers"
-  DESTINATION = "/tmp"
+  DESTINATION = "/mnt/trailers"
   MAIL = "toledowieting@gmail.com"
   LOGFILE = "/tmp/dcp_manger.log"
   DEBUG = False
+  SCOPE = False
+  COPY_ALL = False
 
   # -------------------------------
   # Perform the specified OPERATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -66,11 +68,11 @@ class dcp_manager():
   #
   def catalog(self):
     # Check for an ASSETMAP file in self.dest
-    if os.path.exists(self.destAssetMap):
+    if os.path.exists(self.destAssetXML):
       self.logger.warning("Be advised, the target ASSETMAP file already exists.  It will be replaced.")
-      os.remove(self.destAssetMap)
+      os.remove(self.destAssetXML)
     else:
-      self.logger.info("No target " + self.destAssetMap + " found so a new one will be created.")
+      self.logger.info("No target " + self.destAssetXML + " found so a new one will be created.")
   
     self.initAssetMap()     # Initialize a new empty ASSETMAP
     
@@ -81,10 +83,10 @@ class dcp_manager():
         path = root + "/" + filename
         pkls.append(path)
 
-    # Open self.destAssetMap and append the AssetList tag
-    tree = ET.parse(self.destAssetMap)
+    # Open self.destAssetXML and append the AssetList tag
+    tree = etree.parse(self.destAssetXML)
     root = tree.getroot()
-    assetList = ET.SubElement(root, 'AssetList')
+    assetList = etree.SubElement(root, 'AssetList')
 
     pCount = 0    # number of packages
     aCount = 0    # number of assets found (the files exist)
@@ -98,6 +100,13 @@ class dcp_manager():
       package = self.fetchPKLAssets()
       pCount += 1
       missing = 0
+
+      # If self.scope is False, check the package name and skip it if '_S_' is part of the name
+      if not self.scope:
+        if '_S_' in package:
+          pSkip += 1
+          self.logger.info("Package '" + package + "' is in SCOPE and has been omitted.")
+          continue
 
       # Found a package.  Determine if all of its assets are present.
       for a in self.assets:
@@ -121,25 +130,113 @@ class dcp_manager():
         for a in self.assets:
           filename = self.remove_prefix(a['file'], self.source + "/")
           aCount += 1
-          asset = ET.SubElement(assetList, "Asset")
-          ET.SubElement(asset, "Id").text = a['id']
-          chunkList = ET.SubElement(asset, "Chunklist")
-          chunk = ET.SubElement(chunkList, "Chunk")
-          ET.SubElement(chunk, "Path").text = filename
-          ET.SubElement(chunk, "VolumeIndex").text = '1'
-          ET.SubElement(chunk, "Length").text = str(a['size'])
+          asset = etree.SubElement(assetList, "Asset")
+          etree.SubElement(asset, "Id").text = a['id']
+          if 'PKL_' in filename:
+            etree.SubElement(asset, "PackingList").text = 'true'
+          chunkList = etree.SubElement(asset, "ChunkList")
+          chunk = etree.SubElement(chunkList, "Chunk")
+          etree.SubElement(chunk, "Path").text = filename
+          etree.SubElement(chunk, "VolumeIndex").text = '1'
+          etree.SubElement(chunk, "Length").text = str(a['size'])
       
           # Update the ASSETMAP file after each asset is added
-          xml = ET.ElementTree(root)
-          xml.write(self.destAssetMap, pretty_print=True, xml_declaration=True)
+          xml = etree.ElementTree(root)
+          xml.write(self.destAssetXML, pretty_print=True, xml_declaration=True)
 
-    parser = ET.XMLParser(remove_blank_text=True)
-    tree = ET.parse(self.destAssetMap, parser)
-    print ET.tostring(tree, pretty_print=True, xml_declaration=True)
+    parser = etree.XMLParser(remove_blank_text=True)
+    tree = etree.parse(self.destAssetXML, parser)
+    print etree.tostring(tree, pretty_print=True, xml_declaration=True)
     print ""
+
+    # Pretty print the output per http://stackoverflow.com/questions/33567245/run-console-command-with-python
+    with open(self.destAssetMap, 'w') as outfile:
+      subprocess.call(["xmllint", "--format", self.destAssetXML], stdout=outfile)
 
     self.logger.info("CATALOG operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
                       str(aCount) + " of " + str(aTotal) + " possible assets found.")
+
+  # -------------------------------
+  # Copy - Execute rsync for asset files found in the self.source directory.
+  #
+  def copy(self):
+
+      # Find all PKL files in the source directory
+      pkls = []
+      for root, dirnames, filenames in os.walk(self.source):
+          for filename in fnmatch.filter(filenames, '[Pp][Kk][Ll]*.[Xx][Mm][Ll]'):
+              path = root + "/" + filename
+              pkls.append(path)
+
+      pCount = 0  # number of packages
+      aCount = 0  # number of assets found (the files exist)
+      aTotal = 0  # total number of assets identifed
+      pSkip = 0  # number of packages skipped (due to missing assets)
+
+      # Loop on the found PKL files
+      for pkl in pkls:
+          self.pkl = pkl
+          self.assets = []
+          package = self.fetchPKLAssets()
+          pCount += 1
+          missing = 0
+
+          # If self.scope is False, check the package name and skip it if '_S_' is part of the name
+          if not self.scope:
+              if '_S_' in package:
+                  pSkip += 1
+                  self.logger.info("Package '" + package + "' is in SCOPE and has been omitted.")
+                  continue
+
+          # Found a package.  Determine if all of its assets are present.
+          for a in self.assets:
+              aTotal += 1
+              filename = a['file']
+              target = self.source + "/" + filename  # @TODO...assumes the asset is in self.source directory
+              # First, determine if the file exists...
+              if filename == 'None':
+                  missing += 1
+              elif not os.path.isfile(target):
+                  missing += 1
+                  self.logger.warning("File " + target + ", part of " + package + ", was NOT found.")
+
+          # If assets are missing, skip the package.
+          if missing > 0:
+              self.logger.warning("Package '" + package + "' is missing " + str(
+                  missing) + " element(s) and has been omitted from the catalog.")
+              pSkip += 1
+
+          # Loop again and catalog the complete package
+          else:
+              for a in self.assets:
+                  filename = self.remove_prefix(a['file'], self.source + "/")
+                  aCount += 1
+                  asset = etree.SubElement(assetList, "Asset")
+                  etree.SubElement(asset, "Id").text = a['id']
+                  if 'PKL_' in filename:
+                      etree.SubElement(asset, "PackingList").text = 'true'
+                  chunkList = etree.SubElement(asset, "ChunkList")
+                  chunk = etree.SubElement(chunkList, "Chunk")
+                  etree.SubElement(chunk, "Path").text = filename
+                  etree.SubElement(chunk, "VolumeIndex").text = '1'
+                  etree.SubElement(chunk, "Length").text = str(a['size'])
+
+                  # Update the ASSETMAP file after each asset is added
+                  xml = etree.ElementTree(root)
+                  xml.write(self.destAssetXML, pretty_print=True, xml_declaration=True)
+
+      parser = etree.XMLParser(remove_blank_text=True)
+      tree = etree.parse(self.destAssetXML, parser)
+      print etree.tostring(tree, pretty_print=True, xml_declaration=True)
+      print ""
+
+      # Pretty print the output per http://stackoverflow.com/questions/33567245/run-console-command-with-python
+      with open(self.destAssetMap, 'w') as outfile:
+          subprocess.call(["xmllint", "--format", self.destAssetXML], stdout=outfile)
+
+      self.logger.info(
+          "CATALOG operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
+          str(aCount) + " of " + str(aTotal) + " possible assets found.")
 
 
   # --------------------------------
@@ -183,15 +280,15 @@ class dcp_manager():
 
   #------------------------------
   def initAssetMap(self):
-    root = ET.Element('AssetMap')
-    ET.SubElement(root, 'AnnotationText').text = 'DCP Manager Build ' + self.date
-    ET.SubElement(root, 'VolumeCount').text = '1'
-    ET.SubElement(root, 'IssueDate').text = self.date
-    ET.SubElement(root, 'Issuer').text = 'Mark McFate'
-    ET.SubElement(root, 'Creator').text = 'DCP Manager'
-    # print ET.tostring(root, pretty_print=True, xml_declaration=True)
-    xml = ET.ElementTree(root)
-    xml.write(self.destAssetMap, pretty_print=True, xml_declaration=True)
+    root = etree.Element('AssetMap')
+    etree.SubElement(root, 'AnnotationText').text = 'DCP Manager Build ' + self.date
+    etree.SubElement(root, 'VolumeCount').text = '1'
+    etree.SubElement(root, 'IssueDate').text = self.time
+    etree.SubElement(root, 'Issuer').text = 'Mark McFate'
+    etree.SubElement(root, 'Creator').text = 'DCP Manager'
+    # print etree.tostring(root, pretty_print=True, xml_declaration=True)
+    xml = etree.ElementTree(root)
+    xml.write(self.destAssetXML, pretty_print=True, xml_declaration=True)
 
 
   #-------------------------------
@@ -218,6 +315,8 @@ class dcp_manager():
     parser.add_argument("-m", "--mail", help="eMail address where the log file will be sent.  Default is " + self.MAIL)
     parser.add_argument("-l", "--logfile", help="Specify the logfile to record opeartion activity.  Default is " + self.LOGFILE)
     parser.add_argument("--debug", help="Toggle debug output ON.  Default is OFF")
+    parser.add_argument("--scope", help="Toggle SCOPE ON to operate on packages with '_S_' in the name.  Default is OFF")
+    parser.add_argument("--copy_all", help="Toggle COPY_ALL ON to copy ALL versions of similarly named packages.  Default is OFF so that only the highest numbered packages are copied")
     args = parser.parse_args()
 
     # Define variables
@@ -242,15 +341,24 @@ class dcp_manager():
       self.debug = self.DEBUG
     else:
       self.debug = True
+    if not args.scope:
+      self.scope = self.SCOPE
+    else:
+      self.scope = True
+    if not args.copy_all:
+      self.copy_all = self.COPY_ALL
+    else:
+      self.scope = True
 
     self.args = args
     self.logger = logging.getLogger("logger")
     self.now = datetime.datetime.now()
-    self.date = self.now.strftime("%Y-%m-%d")
+    self.date = self.now.strftime("%Y-%m-%dT")
+    self.time = self.now.strftime("%Y-%m-%dT%H:%M:%S-08:00")
     
     # Declare the ASSETMAP file(s)
     self.destAssetMap = self.dest + "/ASSETMAP"
-    self.sourceAssetMap = self.source + "/ASSETMAP"
+    self.destAssetXML = self.destAssetMap + ".xml"
 
     # Logging
     FORMAT = '%(asctime)-15s (%(levelname)s): %(message)s'
