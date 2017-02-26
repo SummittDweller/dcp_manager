@@ -173,11 +173,12 @@ class dcp_manager():
       pCount = 0  # number of packages
       aCount = 0  # number of assets found (the files exist)
       aTotal = 0  # total number of assets identifed
-      pSkip = 0  # number of packages skipped (due to missing assets)
+      pSkip  = 0  # number of packages skipped due to missing assets or ignored format
 
       self.destAssetMap = "/tmp/ASSETMAP"
 
       # Loop on the found PKL files
+      packages = {}     # create an empty dictionary
       for pkl in pkls:
           self.pkl = pkl
           self.assets = []
@@ -210,24 +211,34 @@ class dcp_manager():
                   missing) + " element(s) and has been omitted from the catalog.")
               pSkip += 1
 
-          # Loop again and catalog the complete package
+          # Save the package (name, path) in the packages dict.
           else:
-              for a in self.assets:
-                  filename = self.remove_prefix(a['file'], self.source + "/")
-                  aCount += 1
-                  asset = etree.SubElement(assetList, "Asset")
-                  etree.SubElement(asset, "Id").text = a['id']
-                  if 'PKL_' in filename:
-                      etree.SubElement(asset, "PackingList").text = 'true'
-                  chunkList = etree.SubElement(asset, "ChunkList")
-                  chunk = etree.SubElement(chunkList, "Chunk")
-                  etree.SubElement(chunk, "Path").text = filename
-                  etree.SubElement(chunk, "VolumeIndex").text = '1'
-                  etree.SubElement(chunk, "Length").text = str(a['size'])
+            packages[package] = pkl
 
-                  # Update the ASSETMAP file after each asset is added
-                  xml = etree.ElementTree(root)
-                  xml.write(self.destAssetXML, pretty_print=True, xml_declaration=True)
+      # Now loop on all the packages, find similarly named packages
+      for package in packages:
+        key = package.split('_', 1)[0]
+
+        similar = [(k, v) for (k, v) in packages.iteritems() if key in k]
+        num_similar = len(similar)
+        self.logger.info("There are " + str(num_similar) + " packages with a key similar to " + key)
+
+          #    for a in self.assets:
+          #        filename = self.remove_prefix(a['file'], self.source + "/")
+          #        aCount += 1
+          #        asset = etree.SubElement(assetList, "Asset")
+          #        etree.SubElement(asset, "Id").text = a['id']
+          #        if 'PKL_' in filename:
+          #            etree.SubElement(asset, "PackingList").text = 'true'
+          #        chunkList = etree.SubElement(asset, "ChunkList")
+          #        chunk = etree.SubElement(chunkList, "Chunk")
+          #        etree.SubElement(chunk, "Path").text = filename
+          #        etree.SubElement(chunk, "VolumeIndex").text = '1'
+          #        etree.SubElement(chunk, "Length").text = str(a['size'])
+
+                   # Update the ASSETMAP file after each asset is added
+                   # xml = etree.ElementTree(root)
+                   # xml.write(self.destAssetXML, pretty_print=True, xml_declaration=True)
 
       self.logger.info(
           "COPY operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
