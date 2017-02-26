@@ -219,30 +219,40 @@ class dcp_manager():
       for package in packages:
         key = package.split('_', 1)[0]
 
-        similar = [(k, v) for (k, v) in packages.iteritems() if key in k]
-        num_similar = len(similar)
+        self.similar = [(k, v) for (k, v) in packages.iteritems() if key in k]
+        num_similar = len(self.similar)
         self.logger.info("There are " + str(num_similar) + " packages with a key similar to " + key)
 
-          #    for a in self.assets:
-          #        filename = self.remove_prefix(a['file'], self.source + "/")
-          #        aCount += 1
-          #        asset = etree.SubElement(assetList, "Asset")
-          #        etree.SubElement(asset, "Id").text = a['id']
-          #        if 'PKL_' in filename:
-          #            etree.SubElement(asset, "PackingList").text = 'true'
-          #        chunkList = etree.SubElement(asset, "ChunkList")
-          #        chunk = etree.SubElement(chunkList, "Chunk")
-          #        etree.SubElement(chunk, "Path").text = filename
-          #        etree.SubElement(chunk, "VolumeIndex").text = '1'
-          #        etree.SubElement(chunk, "Length").text = str(a['size'])
-
-                   # Update the ASSETMAP file after each asset is added
-                   # xml = etree.ElementTree(root)
-                   # xml.write(self.destAssetXML, pretty_print=True, xml_declaration=True)
+      # Now find the best pacakges (2D and maybe 3D) to keep
+      self.keep = {}
+      self.keepBest2DPackage()
+      self.keepBest3DPackage()
 
       self.logger.info(
           "COPY operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
           str(aCount) + " of " + str(aTotal) + " possible assets found.")
+
+
+  #---------------------------------
+  # keepBest2DPackage
+  def keepBest2DPackage(self):
+    n = 0
+    for key, value in self.similar.iteritems():
+      n += 1
+      if not '3D' in key:
+        self.keep['2D'] = key
+    return
+
+
+  #---------------------------------
+  # keepBest3DPackage
+  def keepBest3DPackage(self):
+    n = 0
+    for key, value in self.similar.iteritems():
+      n += 1
+      if '3D' in key:
+        self.keep['3D'] = key
+    return
 
 
   # --------------------------------
