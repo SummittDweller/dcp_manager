@@ -223,10 +223,10 @@ class dcp_manager():
         num_similar = len(self.similar)
         self.logger.info("There are " + str(num_similar) + " packages with a key similar to " + key)
 
-      # Now find the best pacakges (2D and maybe 3D) to keep
-      self.keep = {}
-      self.keepBest2DPackage()
-      self.keepBest3DPackage()
+        # Now find the best pacakges (2D and maybe 3D) to keep
+        self.keep = {}
+        self.keepBest2DPackage()
+        self.keepBest3DPackage()
 
       self.logger.info(
           "COPY operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
@@ -236,22 +236,25 @@ class dcp_manager():
   #---------------------------------
   # keepBest2DPackage
   def keepBest2DPackage(self):
-    n = 0
-    for key, value in self.similar.iteritems():
-      n += 1
-      if not '3D' in key:
-        self.keep['2D'] = key
+    for k, v in self.similar:
+      if not '3D' in k:
+        self.keep['2D'] = (k, v)
+    try:
+      self.keep['2D']
+    except NameError:
+      self.logger.warning("COPY found NO 2D package to keep!")
+    else:
+      (k, v) = self.keep['2D']
+      self.logger.info("COPY will keep 2D package " + k + ".")
     return
 
 
   #---------------------------------
   # keepBest3DPackage
   def keepBest3DPackage(self):
-    n = 0
-    for key, value in self.similar.iteritems():
-      n += 1
-      if '3D' in key:
-        self.keep['3D'] = key
+    for k, v in self.similar:
+      if '3D' in k:
+        self.keep['3D'] = (k, v)
     return
 
 
