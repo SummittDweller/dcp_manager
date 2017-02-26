@@ -239,13 +239,11 @@ class dcp_manager():
     for k, v in self.similar:
       if not '3D' in k:
         self.keep['2D'] = (k, v)
-    try:
-      self.keep['2D']
-    except NameError:
-      self.logger.warning("COPY found NO 2D package to keep!")
-    else:
+    if '2D' in self.keep:
       (k, v) = self.keep['2D']
       self.logger.info("COPY will keep 2D package " + k + ".")
+    else:
+      self.logger.warning("COPY found NO 2D package to keep!")
     return
 
 
