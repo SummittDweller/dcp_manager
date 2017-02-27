@@ -239,14 +239,13 @@ class dcp_manager():
         num_similar = len(self.similar)
         self.logger.info("There are " + str(num_similar) + " packages with a key similar to " + key)
 
-        # Now find the best pacakges (2D and maybe 3D) to keep
+        # Now find the best 2D, and maybe 3D, pacakges to keep
         self.keep = {}
-        self.keepBest2DPackage()
-        self.keepBest3DPackage()
+        self.keepBestPackages('2D')
+        self.keepBestPackages('3D')
 
         # Ok, build a set of rsync commands to make the copies
         numCopy = self.buildCopyScript( )
-
 
     self.logger.info(
       "COPY operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
@@ -270,47 +269,35 @@ class dcp_manager():
             self.logger.info("Subprocess call to rsync for '" + s +"'.")
 
 
-  # ---------------------------------
-  # keepBest2DPackage
-  def keepBest2DPackage(self):
-    tlrVersion = -1
-    for k, v in self.similar:
-      if '3D' not in k:
-        try:
-          version = re.search('_TLR((-)?[A-Z0-9])', k).group(1)
-          version = ord(version.strip('-'))
-        except AttributeError:
-          version = 0
-        if version > tlrVersion:
-          tlrVersion = version
-          self.keep['2D'] = (k, v)
-    if '2D' in self.keep:
-      (k, v) = self.keep['2D']
-      self.logger.info("COPY will keep 2D package " + k + ".")
-    else:
-      self.logger.warning("COPY found NO 2D package to keep!")
-    return
+  #----------------------------------
+  # findLatestVersion
+  def findLatestVersion(self, type, key, value):
+    try:
+      version = re.search('_TLR((-)?[A-Z0-9])', key).group(1)
+      version = ord(version.strip('-'))
+    except AttributeError:
+      version = 0
+    if version > self.tlrVersion:
+      self.tlrVersion = version
+      self.keep[type] = (key, value)
+
 
   # ---------------------------------
-  # keepBest3DPackage
-  def keepBest3DPackage(self):
-    tlrVersion = -1
+  # keepBestPackages
+  def keepBestPackages(self, type='2D'):
+    self.tlrVersion = -1
     for k, v in self.similar:
-      if '3D' in k:
-        try:
-          version = re.search('_TLR((-)?[A-Z0-9])', k).group(1)
-          version = ord(version.strip('-'))
-        except AttributeError:
-          version = 0
-        if version > tlrVersion:
-          tlrVersion = version
-          self.keep['3D'] = (k, v)
-    if '3D' in self.keep:
-      (k, v) = self.keep['3D']
-      self.logger.info("COPY will keep 3D package " + k + ".")
+      if type == '2D' and '3D' not in k:
+        self.findLatestVersion(type, k, v)
+      elif type == '3D' and '3D' in k:
+        self.findLatestVersion(type, k, v)
+    if type in self.keep:
+      (k, v) = self.keep[type]
+      self.logger.info("COPY will keep " + type + " package " + k + ".")
     else:
-      self.logger.info("COPY found NO 3D package to keep!")
+      self.logger.warning("COPY found NO " + type + " package to keep!")
     return
+
 
   # --------------------------------
   # fetchPKLAssets
