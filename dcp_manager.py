@@ -296,7 +296,7 @@ class dcp_manager():
           s = self.source + "/" + filename  # @TODO...assumes the asset is in self.source directory
           if os.path.isfile(s):
             subprocess.call(["rsync", "-aruvi", s, self.dest])
-            self.logger.info("Subprocess call to rsync for '" + s +"'.")
+            self.logger.info("Subprocess call to rsync for '" + s + "'.")
             count += 1
     return count
 
