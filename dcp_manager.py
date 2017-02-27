@@ -224,6 +224,8 @@ class dcp_manager():
   #
   def delete(self):
     nMatch = 0
+    pattern = self.pkgPattern
+
     # Find all PKL files in the destination directory
     pkls = []
     for root, dirnames, filenames in os.walk(self.dest):
@@ -238,17 +240,20 @@ class dcp_manager():
       self.package = self.fetchPKLAssets()
       self.pCount += 1
 
-      pattern = "r'" + self.pkgPattern + "'"
       if re.search(pattern, self.package):
         nMatch += 1
         # Loop again on the assets and remove them
         for a in self.assets:
           filename = self.remove_prefix(a['file'], self.dest + "/")
-          os.remove(filename)
-          self.numDel += 1
+          path = self.dest + "/" + filename
+          try:
+            os.remove(path)
+            self.numDel += 1
+          except:
+            self.logger.warning("DELETE failed to remove file '" + path + "'.")
 
     self.logger.info(
-      "DELETE operation is complete with the '" + self.pkgPattern + "' matching " + str(nMatch) + " packages.  " + str(self.numDel) + " assets were deleted.")
+      "DELETE operation is complete with the '" + self.pkgPattern + "' pattern matching " + str(nMatch) + " packages.  " + str(self.numDel) + " assets were deleted.")
 
 
   #--------------------------------
