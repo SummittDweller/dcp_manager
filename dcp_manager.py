@@ -37,6 +37,13 @@ class dcp_manager():
   # -------------------------------
   # Perform the specified OPERATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   def main(self):
+
+    self.pCount = 0   # number of packages
+    self.aCount = 0   # number of assets found (the files exist)
+    self.aTotal = 0   # total number of assets identifed
+    self.pSkip = 0    # number of packages skipped due to missing assets or ignored format
+    self.numCopy = 0  # number of rsync copy operations performed
+
     self.parse_args()
     self.return_value = 0
     if self.logfile:
@@ -61,7 +68,7 @@ class dcp_manager():
       self.send_mail(self.mail, self.logfile, self.return_value, out)
 
   # -------------------------------
-  # Catalog - Prepare an ASSETMAP file reflecting contents of the self.source directory.
+  # CATALOG - Prepare an ASSETMAP file reflecting contents of the self.source directory.
   #
   # Logic to append data to the existing XML is from
   # http://stackoverflow.com/questions/3648689/python-lxml-append-a-existing-xml-with-new-data
@@ -89,69 +96,39 @@ class dcp_manager():
     root = tree.getroot()
     assetList = etree.SubElement(root, 'AssetList')
 
-    pCount = 0  # number of packages
-    aCount = 0  # number of assets found (the files exist)
-    aTotal = 0  # total number of assets identifed
-    pSkip = 0  # number of packages skipped (due to missing assets)
-
     # Loop on the found PKL files
     for pkl in pkls:
       self.pkl = pkl
       self.assets = []
-      package = self.fetchPKLAssets()
-      pCount += 1
+      self.package = self.fetchPKLAssets()
+      self.pCount += 1
       missing = 0
 
-      # If self.scope is False, check the package name and skip it if '_S_' is part of the name
-      if not self.scope:
-        if '_S_' in package:
-          pSkip += 1
-          self.logger.info("Package '" + package + "' is in SCOPE and has been omitted.")
-          continue
-
-      # If self.not_tlr is False, check the package name and skip it if '_TLR' is not part of the name
-      if not self.not_tlr:
-        if '_TLR' not in package:
-          pSkip += 1
-          self.logger.info("Package '" + package + "' is not a TRAILER and has been omitted.")
-          continue
+      # Determine if the package should be skipped...
+      if self.skipPackage():
+        continue
 
       # Found a package.  Determine if all of its assets are present.
-      for a in self.assets:
-        aTotal += 1
-        filename = a['file']
-        target = self.source + "/" + filename  # @TODO...assumes the asset is in self.source directory
-        # First, determine if the file exists...
-        if filename == 'None':
-          missing += 1
-        elif not os.path.isfile(target):
-          missing += 1
-          self.logger.warning("File " + target + ", part of " + package + ", was NOT found.")
-
-      # If assets are missing, skip the package.
-      if missing > 0:
-        self.logger.warning("Package '" + package + "' is missing " + str(
-          missing) + " element(s) and has been omitted from the catalog.")
-        pSkip += 1
+      if self.packageAssetsMissing():
+        continue
 
       # Loop again and catalog the complete package
-      else:
-        for a in self.assets:
-          filename = self.remove_prefix(a['file'], self.source + "/")
-          aCount += 1
-          asset = etree.SubElement(assetList, "Asset")
-          etree.SubElement(asset, "Id").text = a['id']
-          if 'PKL_' in filename:
-            etree.SubElement(asset, "PackingList").text = 'true'
-          chunkList = etree.SubElement(asset, "ChunkList")
-          chunk = etree.SubElement(chunkList, "Chunk")
-          etree.SubElement(chunk, "Path").text = filename
-          etree.SubElement(chunk, "VolumeIndex").text = '1'
-          etree.SubElement(chunk, "Length").text = str(a['size'])
+      for a in self.assets:
+        filename = self.remove_prefix(a['file'], self.source + "/")
+        self.aCount += 1
+        asset = etree.SubElement(assetList, "Asset")
+        etree.SubElement(asset, "Id").text = a['id']
+        if 'PKL_' in filename:
+          etree.SubElement(asset, "PackingList").text = 'true'
+        chunkList = etree.SubElement(asset, "ChunkList")
+        chunk = etree.SubElement(chunkList, "Chunk")
+        etree.SubElement(chunk, "Path").text = filename
+        etree.SubElement(chunk, "VolumeIndex").text = '1'
+        etree.SubElement(chunk, "Length").text = str(a['size'])
 
-          # Update the ASSETMAP file after each asset is added
-          xml = etree.ElementTree(root)
-          xml.write(self.destAssetXML, pretty_print=True, xml_declaration=True)
+        # Update the ASSETMAP file after each asset is added
+        xml = etree.ElementTree(root)
+        xml.write(self.destAssetXML, pretty_print=True, xml_declaration=True)
 
     parser = etree.XMLParser(remove_blank_text=True)
     tree = etree.parse(self.destAssetXML, parser)
@@ -163,11 +140,30 @@ class dcp_manager():
       subprocess.call(["xmllint", "--format", self.destAssetXML], stdout=outfile)
 
     self.logger.info(
-      "CATALOG operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
-      str(aCount) + " of " + str(aTotal) + " possible assets found.")
+      "CATALOG operation is complete with " + str(self.pSkip) + " of " + str(self.pCount) + " packages skipped, and " +
+      str(self.aCount) + " of " + str(self.aTotal) + " possible assets found.")
+
+
+  #--------------------------
+  # skipPackage
+  def skipPackage(self):
+    # If self.scope is False, check the package name and skip it if '_S_' is part of the name
+    if not self.scope:
+      if '_S_' in self.package:
+        self.pSkip += 1
+        self.logger.info("Package '" + self.package + "' is in SCOPE and has been omitted.")
+        return True
+    # If self.not_tlr is False, check the package name and skip it if '_TLR' is not part of the name
+    if not self.not_tlr:
+      if '_TLR' not in self.package:
+        self.pSkip += 1
+        self.logger.info("Package '" + self.package + "' is not a TRAILER and has been omitted.")
+        return True
+    return False
+
 
   # -------------------------------
-  # Copy - Execute rsync for asset files found in the self.source directory.
+  # COPY - Execute rsync for asset files found in the self.source directory.
   #
   def copy(self):
 
@@ -178,11 +174,6 @@ class dcp_manager():
         path = root + "/" + filename
         pkls.append(path)
 
-    pCount = 0  # number of packages
-    aCount = 0  # number of assets found (the files exist)
-    aTotal = 0  # total number of assets identifed
-    pSkip = 0  # number of packages skipped due to missing assets or ignored format
-
     self.destAssetMap = "/tmp/ASSETMAP"
 
     # Loop on the found PKL files
@@ -190,45 +181,20 @@ class dcp_manager():
     for pkl in pkls:
       self.pkl = pkl
       self.assets = []
-      package = self.fetchPKLAssets()
-      pCount += 1
-      missing = 0
+      self.package = self.fetchPKLAssets()
+      self.pCount += 1
+      self.missing = 0
 
-      # If self.scope is False, check the package name and skip it if '_S_' is part of the name
-      if not self.scope:
-        if '_S_' in package:
-          pSkip += 1
-          self.logger.info("Package '" + package + "' is in SCOPE and has been omitted.")
-          continue
-
-      # If self.not_tlr is False, check the package name and skip it if '_TLR' is not part of the name
-      if not self.not_tlr:
-        if '_TLR' not in package:
-          pSkip += 1
-          self.logger.info("Package '" + package + "' is not a TRAILER and has been omitted.")
-          continue
+      # Determine if package should be skipped...
+      if self.skipPackage():
+        continue
 
       # Found a package.  Determine if all of its assets are present.
-      for a in self.assets:
-        aTotal += 1
-        filename = a['file']
-        target = self.source + "/" + filename  # @TODO...assumes the asset is in self.source directory
-        # First, determine if the file exists...
-        if filename == 'None':
-          missing += 1
-        elif not os.path.isfile(target):
-          missing += 1
-          self.logger.warning("File " + target + ", part of " + package + ", was NOT found.")
-
-      # If assets are missing, skip the package.
-      if missing > 0:
-        self.logger.warning("Package '" + package + "' is missing " + str(
-          missing) + " element(s) and has been omitted from the catalog.")
-        pSkip += 1
+      if self.packageAssetsMissing( ):
+        continue
 
       # Save the package (name, path) in the packages dict.
-      else:
-        packages[package] = pkl
+      packages[self.package] = pkl
 
     # Now loop on all the packages, find similarly named packages
     if __name__ == '__main__':
@@ -245,16 +211,39 @@ class dcp_manager():
         self.keepBestPackages('3D')
 
         # Ok, build a set of rsync commands to make the copies
-        numCopy = self.buildCopyScript( )
+        self.numCopy += self.buildCopyScript( )
 
     self.logger.info(
-      "COPY operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
-      str(aCount) + " of " + str(aTotal) + " possible assets found.")
+      "COPY operation is complete with " + str(self.pSkip) + " of " + str(self.pCount) + " packages skipped, and " +
+      str(self.aCount) + " of " + str(self.aTotal) + " possible assets found. " + str(self.numCopy) + " rsync operations were peformed.")
+
+
+  #--------------------------------
+  # packageAssetsMissing
+  def packageAssetsMissing(self):
+    missing = 0
+    for a in self.assets:
+      self.aTotal += 1
+      filename = a['file']
+      target = self.source + "/" + filename  # @TODO...assumes the asset is in self.source directory
+      # First, determine if the file exists...
+      if filename == 'None':
+        missing += 1
+      elif not os.path.isfile(target):
+        missing += 1
+        self.logger.warning("File " + target + ", part of " + self.package + ", was NOT found.")
+
+    # If assets are missing, skip the package.
+    if missing > 0:
+      self.logger.warning("Package '" + self.package + "' is missing " + str(missing) + " element(s) and has been omitted from the catalog.")
+      self.pSkip += 1
+    return missing
 
 
   #--------------------------------
   # buildCopyScript
   def buildCopyScript(self):
+    count = 0
     for type in ['2D', '3D']:
       if type in self.keep:
         (k, v) = self.keep[type]
@@ -267,6 +256,8 @@ class dcp_manager():
           if os.path.isfile(s):
             subprocess.call(["rsync", "-aruvi", s, self.dest])
             self.logger.info("Subprocess call to rsync for '" + s +"'.")
+            count += 1
+    return count
 
 
   #----------------------------------
