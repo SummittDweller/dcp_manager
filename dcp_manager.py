@@ -102,7 +102,6 @@ class dcp_manager():
       self.assets = []
       self.package = self.fetchPKLAssets()
       self.pCount += 1
-      missing = 0
 
       # Determine if the package should be skipped...
       if self.skipPackage():
@@ -197,21 +196,20 @@ class dcp_manager():
       packages[self.package] = pkl
 
     # Now loop on all the packages, find similarly named packages
-    if __name__ == '__main__':
-      for package in packages:
-        key = package.split('_', 1)[0]
+    for self.package in packages:
+      key = self.package.split('_', 1)[0]
 
-        self.similar = [(k, v) for (k, v) in packages.iteritems() if key in k]
-        num_similar = len(self.similar)
-        self.logger.info("There are " + str(num_similar) + " packages with a key similar to " + key)
+      self.similar = [(k, v) for (k, v) in packages.iteritems() if key in k]
+      num_similar = len(self.similar)
+      self.logger.info("There are " + str(num_similar) + " packages with a key similar to " + key)
 
-        # Now find the best 2D, and maybe 3D, pacakges to keep
-        self.keep = {}
-        self.keepBestPackages('2D')
-        self.keepBestPackages('3D')
+      # Now find the best 2D, and maybe 3D, pacakges to keep
+      self.keep = {}
+      self.keepBestPackages('2D')
+      self.keepBestPackages('3D')
 
-        # Ok, build a set of rsync commands to make the copies
-        self.numCopy += self.buildCopyScript( )
+      # Ok, build a set of rsync commands to make the copies
+      self.numCopy += self.buildCopyScript( )
 
     self.logger.info(
       "COPY operation is complete with " + str(self.pSkip) + " of " + str(self.pCount) + " packages skipped, and " +
@@ -232,11 +230,14 @@ class dcp_manager():
       elif not os.path.isfile(target):
         missing += 1
         self.logger.warning("File " + target + ", part of " + self.package + ", was NOT found.")
+      else:
+        self.aCount += 1
 
     # If assets are missing, skip the package.
     if missing > 0:
       self.logger.warning("Package '" + self.package + "' is missing " + str(missing) + " element(s) and has been omitted from the catalog.")
       self.pSkip += 1
+
     return missing
 
 
