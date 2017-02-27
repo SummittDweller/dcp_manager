@@ -256,17 +256,18 @@ class dcp_manager():
   #--------------------------------
   # buildCopyScript
   def buildCopyScript(self):
-    if '2D' in self.keep:
-      (k, v) = self.keep['2D']
-      self.pkl = v
-      self.assets = []
-      package = self.fetchPKLAssets()
-      for a in self.assets:
-        filename = a['file']
-        s = self.source + "/" + filename  # @TODO...assumes the asset is in self.source directory
-        if os.path.isfile(s):
-          subprocess.call(["rsync", "-aruvi", s, self.dest])
-          self.logger.info("Subprocess call to rsync for '" + s +"'.")
+    for type in ['2D', '3D']:
+      if type in self.keep:
+        (k, v) = self.keep[type]
+        self.pkl = v
+        self.assets = []
+        package = self.fetchPKLAssets()
+        for a in self.assets:
+          filename = a['file']
+          s = self.source + "/" + filename  # @TODO...assumes the asset is in self.source directory
+          if os.path.isfile(s):
+            subprocess.call(["rsync", "-aruvi", s, self.dest])
+            self.logger.info("Subprocess call to rsync for '" + s +"'.")
 
 
   # ---------------------------------
