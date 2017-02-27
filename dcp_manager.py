@@ -114,7 +114,6 @@ class dcp_manager():
       # Loop again and catalog the complete package
       for a in self.assets:
         filename = self.remove_prefix(a['file'], self.source + "/")
-        self.aCount += 1
         asset = etree.SubElement(assetList, "Asset")
         etree.SubElement(asset, "Id").text = a['id']
         if 'PKL_' in filename:
