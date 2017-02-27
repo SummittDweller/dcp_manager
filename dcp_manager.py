@@ -36,6 +36,7 @@ class dcp_manager():
 
   # -------------------------------
   # Perform the specified OPERATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  #
   def main(self):
 
     self.pCount = 0   # number of packages
@@ -43,6 +44,7 @@ class dcp_manager():
     self.aTotal = 0   # total number of assets identifed
     self.pSkip = 0    # number of packages skipped due to missing assets or ignored format
     self.numCopy = 0  # number of rsync copy operations performed
+    self.numDel = 0   # number of assests deleted
 
     self.parse_args()
     self.return_value = 0
@@ -56,6 +58,8 @@ class dcp_manager():
       out = self.catalog()
     elif self.op.lower() == 'copy':
       out = self.copy()
+    elif self.op.lower() == 'delete':
+      out = self.delete()
     else:
       msg = "The specifed '" + self.op + "' is NOT supported.  Exiting..."
       self.logger.info(msg)
@@ -215,6 +219,38 @@ class dcp_manager():
       str(self.aCount) + " of " + str(self.aTotal) + " possible assets found. " + str(self.numCopy) + " rsync operations were peformed.")
 
 
+  # -------------------------------
+  # DELETE - Remove asset files of --packages pattern from self.dest.
+  #
+  def delete(self):
+    nMatch = 0
+    # Find all PKL files in the destination directory
+    pkls = []
+    for root, dirnames, filenames in os.walk(self.dest):
+      for filename in fnmatch.filter(filenames, '[Pp][Kk][Ll]*.[Xx][Mm][Ll]'):
+        path = root + "/" + filename
+        pkls.append(path)
+
+    # Loop on the found PKL files
+    for pkl in pkls:
+      self.pkl = pkl
+      self.assets = []
+      self.package = self.fetchPKLAssets()
+      self.pCount += 1
+
+      pattern = "r'" + self.pkgPattern + "'"
+      if re.search(pattern, self.package):
+        nMatch += 1
+        # Loop again on the assets and remove them
+        for a in self.assets:
+          filename = self.remove_prefix(a['file'], self.dest + "/")
+          os.remove(filename)
+          self.numDel += 1
+
+    self.logger.info(
+      "DELETE operation is complete with the '" + self.pkgPattern + "' matching " + str(nMatch) + " packages.  " + str(self.numDel) + " assets were deleted.")
+
+
   #--------------------------------
   # packageAssetsMissing
   def packageAssetsMissing(self):
@@ -362,6 +398,7 @@ class dcp_manager():
     parser.add_argument("-d", "--destination", help="Specify the destination directory of the OPERATION. Default is " + self.DESTINATION)
     parser.add_argument("-m", "--mail", help="eMail address where the log file will be sent. Default is " + self.MAIL)
     parser.add_argument("-l", "--logfile", help="Specify the logfile to record opeartion activity. Default is " + self.LOGFILE)
+    parser.add_argument("-p", "--packages", help="Specify a pattern to match package names. Used with the DELETE operation")
     parser.add_argument("--debug", help="Toggle debug output ON. Default is OFF")
     parser.add_argument("--scope", help="Toggle SCOPE ON to operate on packages with '_S_' in the name. Default is OFF")
     parser.add_argument("--not_tlr", help="Toggle NOT_TLR ON to operate on pacakges without '_TLR' in the name. Default is OFF")
@@ -397,6 +434,10 @@ class dcp_manager():
       self.not_tlr= self.NOT_TLR
     else:
       self.not_tlr = True
+    if args.packages:
+      self.pkgPattern = args.packages
+    else:
+      self.pkgPattern = 'None'
 
     self.args = args
     self.logger = logging.getLogger("logger")
