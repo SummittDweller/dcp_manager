@@ -12,11 +12,11 @@ import re
 import subprocess
 from lxml import etree
 from email.mime.text import MIMEText
-from smtplib import SMTP                    # use this for standard SMTP protocol (TLS encryption)
+from smtplib import SMTP  # use this for standard SMTP protocol (TLS encryption)
+
 
 # -------------------------------
 class dcp_manager():
-  
   """
   This script is used by the Wieting Theatre (Toledo, IA) to manage the ingest and storage
   of DCP cinema packages, mostly trailers.
@@ -32,7 +32,7 @@ class dcp_manager():
   LOGFILE = "/tmp/dcp_manger.log"
   DEBUG = False
   SCOPE = False
-  COPY_ALL = False
+  NOT_TLR = False
 
   # -------------------------------
   # Perform the specified OPERATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -43,7 +43,7 @@ class dcp_manager():
       self.logger.info("Saving " + self.op + " operation logfile to " + self.logfile + ".")
     else:
       self.logger.info("Starting " + self.op + " operation without a logfile.")
-  
+
     # The operation switch...
     if self.op.lower() == 'catalog':
       out = self.catalog()
@@ -55,11 +55,10 @@ class dcp_manager():
       if self.mail:
         self.send_mail(self.mail, self.logfile, 400, msg)
       exit(1)
-  
+
     self.logger.info("Operation " + self.op + " is complete with a return code " + str(self.return_value) + ".")
     if self.mail:
       self.send_mail(self.mail, self.logfile, self.return_value, out)
-
 
   # -------------------------------
   # Catalog - Prepare an ASSETMAP file reflecting contents of the self.source directory.
@@ -75,9 +74,9 @@ class dcp_manager():
       os.remove(self.destAssetXML)
     else:
       self.logger.info("No target " + self.destAssetXML + " found so a new one will be created.")
-  
-    self.initAssetMap()     # Initialize a new empty ASSETMAP
-    
+
+    self.initAssetMap()  # Initialize a new empty ASSETMAP
+
     # Find all PKL files in the source directory
     pkls = []
     for root, dirnames, filenames in os.walk(self.source):
@@ -90,10 +89,10 @@ class dcp_manager():
     root = tree.getroot()
     assetList = etree.SubElement(root, 'AssetList')
 
-    pCount = 0    # number of packages
-    aCount = 0    # number of assets found (the files exist)
-    aTotal = 0    # total number of assets identifed
-    pSkip  = 0    # number of packages skipped (due to missing assets)
+    pCount = 0  # number of packages
+    aCount = 0  # number of assets found (the files exist)
+    aTotal = 0  # total number of assets identifed
+    pSkip = 0  # number of packages skipped (due to missing assets)
 
     # Loop on the found PKL files
     for pkl in pkls:
@@ -110,6 +109,13 @@ class dcp_manager():
           self.logger.info("Package '" + package + "' is in SCOPE and has been omitted.")
           continue
 
+      # If self.not_tlr is False, check the package name and skip it if '_TLR' is not part of the name
+      if not self.not_tlr:
+        if '_TLR' not in package:
+          pSkip += 1
+          self.logger.info("Package '" + package + "' is not a TRAILER and has been omitted.")
+          continue
+
       # Found a package.  Determine if all of its assets are present.
       for a in self.assets:
         aTotal += 1
@@ -124,9 +130,10 @@ class dcp_manager():
 
       # If assets are missing, skip the package.
       if missing > 0:
-        self.logger.warning("Package '" + package + "' is missing " + str(missing) + " element(s) and has been omitted from the catalog.")
+        self.logger.warning("Package '" + package + "' is missing " + str(
+          missing) + " element(s) and has been omitted from the catalog.")
         pSkip += 1
-  
+
       # Loop again and catalog the complete package
       else:
         for a in self.assets:
@@ -141,7 +148,7 @@ class dcp_manager():
           etree.SubElement(chunk, "Path").text = filename
           etree.SubElement(chunk, "VolumeIndex").text = '1'
           etree.SubElement(chunk, "Length").text = str(a['size'])
-      
+
           # Update the ASSETMAP file after each asset is added
           xml = etree.ElementTree(root)
           xml.write(self.destAssetXML, pretty_print=True, xml_declaration=True)
@@ -155,67 +162,76 @@ class dcp_manager():
     with open(self.destAssetMap, 'w') as outfile:
       subprocess.call(["xmllint", "--format", self.destAssetXML], stdout=outfile)
 
-    self.logger.info("CATALOG operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
-                      str(aCount) + " of " + str(aTotal) + " possible assets found.")
+    self.logger.info(
+      "CATALOG operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
+      str(aCount) + " of " + str(aTotal) + " possible assets found.")
 
   # -------------------------------
   # Copy - Execute rsync for asset files found in the self.source directory.
   #
   def copy(self):
 
-      # Find all PKL files in the source directory
-      pkls = []
-      for root, dirnames, filenames in os.walk(self.source):
-          for filename in fnmatch.filter(filenames, '[Pp][Kk][Ll]*.[Xx][Mm][Ll]'):
-              path = root + "/" + filename
-              pkls.append(path)
+    # Find all PKL files in the source directory
+    pkls = []
+    for root, dirnames, filenames in os.walk(self.source):
+      for filename in fnmatch.filter(filenames, '[Pp][Kk][Ll]*.[Xx][Mm][Ll]'):
+        path = root + "/" + filename
+        pkls.append(path)
 
-      pCount = 0  # number of packages
-      aCount = 0  # number of assets found (the files exist)
-      aTotal = 0  # total number of assets identifed
-      pSkip  = 0  # number of packages skipped due to missing assets or ignored format
+    pCount = 0  # number of packages
+    aCount = 0  # number of assets found (the files exist)
+    aTotal = 0  # total number of assets identifed
+    pSkip = 0  # number of packages skipped due to missing assets or ignored format
 
-      self.destAssetMap = "/tmp/ASSETMAP"
+    self.destAssetMap = "/tmp/ASSETMAP"
 
-      # Loop on the found PKL files
-      packages = {}     # create an empty dictionary
-      for pkl in pkls:
-          self.pkl = pkl
-          self.assets = []
-          package = self.fetchPKLAssets()
-          pCount += 1
-          missing = 0
+    # Loop on the found PKL files
+    packages = {}  # create an empty dictionary
+    for pkl in pkls:
+      self.pkl = pkl
+      self.assets = []
+      package = self.fetchPKLAssets()
+      pCount += 1
+      missing = 0
 
-          # If self.scope is False, check the package name and skip it if '_S_' is part of the name
-          if not self.scope:
-              if '_S_' in package:
-                  pSkip += 1
-                  self.logger.info("Package '" + package + "' is in SCOPE and has been omitted.")
-                  continue
+      # If self.scope is False, check the package name and skip it if '_S_' is part of the name
+      if not self.scope:
+        if '_S_' in package:
+          pSkip += 1
+          self.logger.info("Package '" + package + "' is in SCOPE and has been omitted.")
+          continue
 
-          # Found a package.  Determine if all of its assets are present.
-          for a in self.assets:
-              aTotal += 1
-              filename = a['file']
-              target = self.source + "/" + filename  # @TODO...assumes the asset is in self.source directory
-              # First, determine if the file exists...
-              if filename == 'None':
-                  missing += 1
-              elif not os.path.isfile(target):
-                  missing += 1
-                  self.logger.warning("File " + target + ", part of " + package + ", was NOT found.")
+      # If self.not_tlr is False, check the package name and skip it if '_TLR' is not part of the name
+      if not self.not_tlr:
+        if '_TLR' not in package:
+          pSkip += 1
+          self.logger.info("Package '" + package + "' is not a TRAILER and has been omitted.")
+          continue
 
-          # If assets are missing, skip the package.
-          if missing > 0:
-              self.logger.warning("Package '" + package + "' is missing " + str(
-                  missing) + " element(s) and has been omitted from the catalog.")
-              pSkip += 1
+      # Found a package.  Determine if all of its assets are present.
+      for a in self.assets:
+        aTotal += 1
+        filename = a['file']
+        target = self.source + "/" + filename  # @TODO...assumes the asset is in self.source directory
+        # First, determine if the file exists...
+        if filename == 'None':
+          missing += 1
+        elif not os.path.isfile(target):
+          missing += 1
+          self.logger.warning("File " + target + ", part of " + package + ", was NOT found.")
 
-          # Save the package (name, path) in the packages dict.
-          else:
-            packages[package] = pkl
+      # If assets are missing, skip the package.
+      if missing > 0:
+        self.logger.warning("Package '" + package + "' is missing " + str(
+          missing) + " element(s) and has been omitted from the catalog.")
+        pSkip += 1
 
-      # Now loop on all the packages, find similarly named packages
+      # Save the package (name, path) in the packages dict.
+      else:
+        packages[package] = pkl
+
+    # Now loop on all the packages, find similarly named packages
+    if __name__ == '__main__':
       for package in packages:
         key = package.split('_', 1)[0]
 
@@ -228,17 +244,45 @@ class dcp_manager():
         self.keepBest2DPackage()
         self.keepBest3DPackage()
 
-      self.logger.info(
-          "COPY operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
-          str(aCount) + " of " + str(aTotal) + " possible assets found.")
+        # Ok, build a set of rsync commands to make the copies
+        numCopy = self.buildCopyScript( )
 
 
-  #---------------------------------
+    self.logger.info(
+      "COPY operation is complete with " + str(pSkip) + " of " + str(pCount) + " packages skipped, and " +
+      str(aCount) + " of " + str(aTotal) + " possible assets found.")
+
+
+  #--------------------------------
+  # buildCopyScript
+  def buildCopyScript(self):
+    if '2D' in self.keep:
+      (k, v) = self.keep['2D']
+      self.pkl = v
+      self.assets = []
+      package = self.fetchPKLAssets()
+      for a in self.assets:
+        filename = a['file']
+        s = self.source + "/" + filename  # @TODO...assumes the asset is in self.source directory
+        if os.path.isfile(s):
+          subprocess.call(["rsync", "-aruvi", s, self.dest])
+          self.logger.info("Subprocess call to rsync for '" + s +"'.")
+
+
+  # ---------------------------------
   # keepBest2DPackage
   def keepBest2DPackage(self):
+    tlrVersion = -1
     for k, v in self.similar:
-      if not '3D' in k:
-        self.keep['2D'] = (k, v)
+      if '3D' not in k:
+        try:
+          version = re.search('_TLR((-)?[A-Z0-9])', k).group(1)
+          version = ord(version.strip('-'))
+        except AttributeError:
+          version = 0
+        if version > tlrVersion:
+          tlrVersion = version
+          self.keep['2D'] = (k, v)
     if '2D' in self.keep:
       (k, v) = self.keep['2D']
       self.logger.info("COPY will keep 2D package " + k + ".")
@@ -246,15 +290,26 @@ class dcp_manager():
       self.logger.warning("COPY found NO 2D package to keep!")
     return
 
-
-  #---------------------------------
+  # ---------------------------------
   # keepBest3DPackage
   def keepBest3DPackage(self):
+    tlrVersion = -1
     for k, v in self.similar:
       if '3D' in k:
-        self.keep['3D'] = (k, v)
+        try:
+          version = re.search('_TLR((-)?[A-Z0-9])', k).group(1)
+          version = ord(version.strip('-'))
+        except AttributeError:
+          version = 0
+        if version > tlrVersion:
+          tlrVersion = version
+          self.keep['3D'] = (k, v)
+    if '3D' in self.keep:
+      (k, v) = self.keep['3D']
+      self.logger.info("COPY will keep 3D package " + k + ".")
+    else:
+      self.logger.info("COPY found NO 3D package to keep!")
     return
-
 
   # --------------------------------
   # fetchPKLAssets
@@ -272,7 +327,7 @@ class dcp_manager():
   def fetchPKLAssets(self):
     with open(self.pkl) as fd:
       doc = xmltodict.parse(fd.read())
-  
+
     # Save the AnnotationText as self.packageName and prepend the PKL itself to the list of assets.
     self.packageName = doc['PackingList']['AnnotationText']
     asset = {}
@@ -280,22 +335,21 @@ class dcp_manager():
     asset['file'] = self.remove_prefix(self.pkl, self.source + '/')
     asset['size'] = os.path.getsize(self.pkl)
     self.assets.append(asset)
-  
+
     # Loop on each Asset found.
     for aList in doc['PackingList']['AssetList']['Asset']:
       asset = {}
-      asset['id'] = aList['Id']             # This must exist!
-      asset['size'] = aList['Size']         # This must exist!
+      asset['id'] = aList['Id']  # This must exist!
+      asset['size'] = aList['Size']  # This must exist!
       if 'OriginalFileName' in aList:
         asset['file'] = aList['OriginalFileName']
       else:
         asset['file'] = 'None'
       self.assets.append(asset)
-  
+
     return self.packageName
 
-
-  #------------------------------
+  # ------------------------------
   def initAssetMap(self):
     root = etree.Element('AssetMap')
     etree.SubElement(root, 'AnnotationText').text = 'DCP Manager Build ' + self.date
@@ -307,9 +361,8 @@ class dcp_manager():
     xml = etree.ElementTree(root)
     xml.write(self.destAssetXML, pretty_print=True, xml_declaration=True)
 
-
-  #-------------------------------
-  #if __name__ == '__main__':
+  # -------------------------------
+  # if __name__ == '__main__':
   def load_SMTP_standards(self):
     self.serveraddress = 'summitt.dweller@gmail.com'
     self.SMTPServer = 'smtp.gmail.com'
@@ -321,19 +374,18 @@ class dcp_manager():
       self.SMTPUser = auth[0]
       self.SMTPPassword = auth[2]
 
-
-  #-------------------------------
+  # -------------------------------
   def parse_args(self):
     # Parse arguments
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("OPERATION", help="Specify the DCP Manager operation to perform.")
-    parser.add_argument("-s", "--source", help="Specify the directory to perform OPERATION on.  Default is " + self.SOURCE)
-    parser.add_argument("-d", "--destination", help="Specify the destination directory of the OPERATION.  Default is " + self.DESTINATION)
-    parser.add_argument("-m", "--mail", help="eMail address where the log file will be sent.  Default is " + self.MAIL)
-    parser.add_argument("-l", "--logfile", help="Specify the logfile to record opeartion activity.  Default is " + self.LOGFILE)
-    parser.add_argument("--debug", help="Toggle debug output ON.  Default is OFF")
-    parser.add_argument("--scope", help="Toggle SCOPE ON to operate on packages with '_S_' in the name.  Default is OFF")
-    parser.add_argument("--copy_all", help="Toggle COPY_ALL ON to copy ALL versions of similarly named packages.  Default is OFF so that only the highest numbered packages are copied")
+    parser.add_argument("-s", "--source", help="Specify the directory to perform OPERATION on. Default is " + self.SOURCE)
+    parser.add_argument("-d", "--destination", help="Specify the destination directory of the OPERATION. Default is " + self.DESTINATION)
+    parser.add_argument("-m", "--mail", help="eMail address where the log file will be sent. Default is " + self.MAIL)
+    parser.add_argument("-l", "--logfile", help="Specify the logfile to record opeartion activity. Default is " + self.LOGFILE)
+    parser.add_argument("--debug", help="Toggle debug output ON. Default is OFF")
+    parser.add_argument("--scope", help="Toggle SCOPE ON to operate on packages with '_S_' in the name. Default is OFF")
+    parser.add_argument("--not_tlr", help="Toggle NOT_TLR ON to operate on pacakges without '_TLR' in the name. Default is OFF")
     args = parser.parse_args()
 
     # Define variables
@@ -362,17 +414,17 @@ class dcp_manager():
       self.scope = self.SCOPE
     else:
       self.scope = True
-    if not args.copy_all:
-      self.copy_all = self.COPY_ALL
+    if not args.not_tlr:
+      self.not_tlr= self.NOT_TLR
     else:
-      self.scope = True
+      self.not_tlr = True
 
     self.args = args
     self.logger = logging.getLogger("logger")
     self.now = datetime.datetime.now()
     self.date = self.now.strftime("%Y-%m-%dT")
     self.time = self.now.strftime("%Y-%m-%dT%H:%M:%S-08:00")
-    
+
     # Declare the ASSETMAP file(s)
     self.destAssetMap = self.dest + "/ASSETMAP"
     self.destAssetXML = self.destAssetMap + ".xml"
@@ -383,9 +435,11 @@ class dcp_manager():
       if self.check_dir_exist(self.logfile):
         os.remove(self.logfile)
       if not self.debug:
-        logging.basicConfig(filename=self.logfile, filemode='w', level=logging.INFO, format=FORMAT, datefmt='%Y.%m.%d %H:%M:%S')
+        logging.basicConfig(filename=self.logfile, filemode='w', level=logging.INFO, format=FORMAT,
+                            datefmt='%Y.%m.%d %H:%M:%S')
       else:
-        logging.basicConfig(filename=self.logfile, filemode='w', level=logging.DEBUG, format=FORMAT, datefmt='%Y.%m.%d %H:%M:%S')
+        logging.basicConfig(filename=self.logfile, filemode='w', level=logging.DEBUG, format=FORMAT,
+                            datefmt='%Y.%m.%d %H:%M:%S')
       consoleHandler = logging.StreamHandler()
       console_format = logging.Formatter(FORMAT)
       consoleHandler.setFormatter(console_format)
@@ -408,14 +462,12 @@ class dcp_manager():
         self.send_mail(self.mail, self.logfile, 1, msg)
         exit(1)
 
-
-  #---------------------------------
+  # ---------------------------------
   # Function to return a string minus some prefix
   def remove_prefix(self, text, prefix):
     if text.startswith(prefix):
       return text[len(prefix):]
     return text
-
 
   # -------------------------------
   # Function to determine if a directory exists
@@ -427,8 +479,7 @@ class dcp_manager():
       self.logger.warning("{} does not exist.".format(os_dir))
       return False
 
-
-  #-------------------------------
+  # -------------------------------
   # Mail mit Log senden
   # Params: Recipient, Logfile, Returncode, Output
   def send_mail(self, recipient, logfile, return_value, output):
@@ -447,7 +498,9 @@ class dcp_manager():
       if return_value == 0:
         msg['Subject'] = "The " + self.op + " operation has completed successfully."
       else:
-        msg['Subject'] = "The " + self.op + " operation did NOT succeed! An Error occured! Return Code = " + str(return_value) + "."
+        msg[
+          'Subject'] = "The " + self.op + " operation did NOT succeed! An Error occured! Return Code = " + str(
+          return_value) + "."
       msg['From'] = self.serveraddress
       msg['To'] = recipient
 
