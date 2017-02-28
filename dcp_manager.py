@@ -34,6 +34,7 @@ class dcp_manager():
   SCOPE = False
   NOT_TLR = False
 
+
   # -------------------------------
   # Perform the specified OPERATION !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
   #
@@ -70,6 +71,108 @@ class dcp_manager():
     self.logger.info("Operation " + self.op + " is complete with a return code " + str(self.return_value) + ".")
     if self.mail:
       self.send_mail(self.mail, self.logfile, self.return_value, out)
+
+
+  # -------------------------------
+  # parse_args
+  #
+  def parse_args(self):
+    # Parse arguments
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("OPERATION", help="Specify the DCP Manager operation to perform.")
+    parser.add_argument("-s", "--source",
+                        help="Specify the directory to perform OPERATION on. Default is " + self.SOURCE)
+    parser.add_argument("-d", "--destination",
+                        help="Specify the destination directory of the OPERATION. Default is " + self.DESTINATION)
+    parser.add_argument("-m", "--mail", help="eMail address where the log file will be sent. Default is " + self.MAIL)
+    parser.add_argument("-l", "--logfile",
+                        help="Specify the logfile to record opeartion activity. Default is " + self.LOGFILE)
+    parser.add_argument("-p", "--packages",
+                        help="Specify a pattern to match package names. Used with the DELETE operation")
+    parser.add_argument("--debug", help="Toggle debug output ON. Default is OFF")
+    parser.add_argument("--scope", help="Toggle SCOPE ON to operate on packages with '_S_' in the name. Default is OFF")
+    parser.add_argument("--not_tlr",
+                        help="Toggle NOT_TLR ON to operate on pacakges without '_TLR' in the name. Default is OFF")
+    args = parser.parse_args()
+
+    # Define variables
+    self.op = args.OPERATION
+    if not args.source:
+      self.source = self.SOURCE
+    else:
+      self.source = args.source
+    if not args.destination:
+      self.dest = self.DESTINATION
+    else:
+      self.dest = args.destination
+    if not args.mail:
+      self.mail = self.MAIL
+    else:
+      self.mail = args.mail
+    if not args.logfile:
+      self.logfile = self.LOGFILE
+    else:
+      self.logfile = args.logfile
+    if not args.debug:
+      self.debug = self.DEBUG
+    else:
+      self.debug = True
+    if not args.scope:
+      self.scope = self.SCOPE
+    else:
+      self.scope = True
+    if not args.not_tlr:
+      self.not_tlr = self.NOT_TLR
+    else:
+      self.not_tlr = True
+    if args.packages:
+      self.pkgPattern = args.packages
+    else:
+      self.pkgPattern = 'None'
+
+    self.args = args
+    self.logger = logging.getLogger("logger")
+    self.now = datetime.datetime.now()
+    self.date = self.now.strftime("%Y-%m-%dT")
+    self.time = self.now.strftime("%Y-%m-%dT%H:%M:%S-08:00")
+
+    # Declare the ASSETMAP file(s)
+    self.destAssetMap = self.dest + "/ASSETMAP"
+    self.destAssetXML = self.destAssetMap + ".xml"
+
+    # Logging
+    FORMAT = '%(asctime)-15s (%(levelname)s): %(message)s'
+    if self.logfile and self.mail:
+      if self.check_dir_exist(self.logfile):
+        os.remove(self.logfile)
+      if not self.debug:
+        logging.basicConfig(filename=self.logfile, filemode='w', level=logging.INFO, format=FORMAT,
+                            datefmt='%Y.%m.%d %H:%M:%S')
+      else:
+        logging.basicConfig(filename=self.logfile, filemode='w', level=logging.DEBUG, format=FORMAT,
+                            datefmt='%Y.%m.%d %H:%M:%S')
+      consoleHandler = logging.StreamHandler()
+      console_format = logging.Formatter(FORMAT)
+      consoleHandler.setFormatter(console_format)
+      consoleHandler.setLevel(logging.DEBUG) if self.debug else consoleHandler.setLevel(logging.INFO)
+      self.logger.addHandler(consoleHandler)
+
+    # Verify source directory exists
+    if not self.check_dir_exist(self.source):
+      msg = "Source directory " + self.source + " does not exist.  Exiting..."
+      self.logger.error(msg)
+      if self.mail:
+        self.send_mail(self.mail, self.logfile, 1, msg)
+        exit(1)
+
+    # Verify destination directory exists
+    if not self.check_dir_exist(self.dest):
+      msg = "Destination directory " + self.dest + " does not exist.  Exiting..."
+      self.logger.error(msg)
+      if self.mail:
+        self.send_mail(self.mail, self.logfile, 1, msg)
+        exit(1)
+
 
   # -------------------------------
   # CATALOG - Prepare an ASSETMAP file reflecting contents of the self.source directory.
@@ -374,6 +477,7 @@ class dcp_manager():
 
     return self.packageName
 
+
   # ------------------------------
   def initAssetMap(self):
     root = etree.Element('AssetMap')
@@ -385,6 +489,7 @@ class dcp_manager():
     # print etree.tostring(root, pretty_print=True, xml_declaration=True)
     xml = etree.ElementTree(root)
     xml.write(self.destAssetXML, pretty_print=True, xml_declaration=True)
+
 
   # -------------------------------
   # if __name__ == '__main__':
@@ -399,98 +504,6 @@ class dcp_manager():
       self.SMTPUser = auth[0]
       self.SMTPPassword = auth[2]
 
-  # -------------------------------
-  def parse_args(self):
-    # Parse arguments
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("OPERATION", help="Specify the DCP Manager operation to perform.")
-    parser.add_argument("-s", "--source", help="Specify the directory to perform OPERATION on. Default is " + self.SOURCE)
-    parser.add_argument("-d", "--destination", help="Specify the destination directory of the OPERATION. Default is " + self.DESTINATION)
-    parser.add_argument("-m", "--mail", help="eMail address where the log file will be sent. Default is " + self.MAIL)
-    parser.add_argument("-l", "--logfile", help="Specify the logfile to record opeartion activity. Default is " + self.LOGFILE)
-    parser.add_argument("-p", "--packages", help="Specify a pattern to match package names. Used with the DELETE operation")
-    parser.add_argument("--debug", help="Toggle debug output ON. Default is OFF")
-    parser.add_argument("--scope", help="Toggle SCOPE ON to operate on packages with '_S_' in the name. Default is OFF")
-    parser.add_argument("--not_tlr", help="Toggle NOT_TLR ON to operate on pacakges without '_TLR' in the name. Default is OFF")
-    args = parser.parse_args()
-
-    # Define variables
-    self.op = args.OPERATION
-    if not args.source:
-      self.source = self.SOURCE
-    else:
-      self.source = args.source
-    if not args.destination:
-      self.dest = self.DESTINATION
-    else:
-      self.dest = args.destination
-    if not args.mail:
-      self.mail = self.MAIL
-    else:
-      self.mail = args.mail
-    if not args.logfile:
-      self.logfile = self.LOGFILE
-    else:
-      self.logfile = args.logfile
-    if not args.debug:
-      self.debug = self.DEBUG
-    else:
-      self.debug = True
-    if not args.scope:
-      self.scope = self.SCOPE
-    else:
-      self.scope = True
-    if not args.not_tlr:
-      self.not_tlr= self.NOT_TLR
-    else:
-      self.not_tlr = True
-    if args.packages:
-      self.pkgPattern = args.packages
-    else:
-      self.pkgPattern = 'None'
-
-    self.args = args
-    self.logger = logging.getLogger("logger")
-    self.now = datetime.datetime.now()
-    self.date = self.now.strftime("%Y-%m-%dT")
-    self.time = self.now.strftime("%Y-%m-%dT%H:%M:%S-08:00")
-
-    # Declare the ASSETMAP file(s)
-    self.destAssetMap = self.dest + "/ASSETMAP"
-    self.destAssetXML = self.destAssetMap + ".xml"
-
-    # Logging
-    FORMAT = '%(asctime)-15s (%(levelname)s): %(message)s'
-    if self.logfile and self.mail:
-      if self.check_dir_exist(self.logfile):
-        os.remove(self.logfile)
-      if not self.debug:
-        logging.basicConfig(filename=self.logfile, filemode='w', level=logging.INFO, format=FORMAT,
-                            datefmt='%Y.%m.%d %H:%M:%S')
-      else:
-        logging.basicConfig(filename=self.logfile, filemode='w', level=logging.DEBUG, format=FORMAT,
-                            datefmt='%Y.%m.%d %H:%M:%S')
-      consoleHandler = logging.StreamHandler()
-      console_format = logging.Formatter(FORMAT)
-      consoleHandler.setFormatter(console_format)
-      consoleHandler.setLevel(logging.DEBUG) if self.debug else consoleHandler.setLevel(logging.INFO)
-      self.logger.addHandler(consoleHandler)
-
-    # Verify source directory exists
-    if not self.check_dir_exist(self.source):
-      msg = "Source directory " + self.source + " does not exist.  Exiting..."
-      self.logger.error(msg)
-      if self.mail:
-        self.send_mail(self.mail, self.logfile, 1, msg)
-        exit(1)
-
-    # Verify destination directory exists
-    if not self.check_dir_exist(self.dest):
-      msg = "Destination directory " + self.dest + " does not exist.  Exiting..."
-      self.logger.error(msg)
-      if self.mail:
-        self.send_mail(self.mail, self.logfile, 1, msg)
-        exit(1)
 
   # ---------------------------------
   # Function to return a string minus some prefix
@@ -498,6 +511,7 @@ class dcp_manager():
     if text.startswith(prefix):
       return text[len(prefix):]
     return text
+
 
   # -------------------------------
   # Function to determine if a directory exists
@@ -508,6 +522,7 @@ class dcp_manager():
     else:
       self.logger.warning("{} does not exist.".format(os_dir))
       return False
+
 
   # -------------------------------
   # Mail mit Log senden
