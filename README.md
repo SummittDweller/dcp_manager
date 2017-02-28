@@ -18,7 +18,7 @@ This script also relies on **~/.netrc** to store and serve up protected credenti
     
 ###Operations
 | Operation | Description |
-|-----------|-------------|
+|:---------:|-------------|
 | **COPY** | Copies pacakge assets from --source to --destination. Only the most recent 2D and 3D versions are copied, and SCOPE and non-TLR packages are ignored by default. |
 | **DELETE** | Removes named --packages assets from --destination.
 | **CATALOG** | Catalogs the package assets in --source to a new ASSETMAP file.
