@@ -30,7 +30,7 @@ This script also relies on **~/.netrc** to store and serve up protected credenti
 |--destination=directory | The destination directory for the COPY operation. | /mnt/trailers |
 |--mail=address | Email address to receive operation logs. | toledowieting@gmail.com |
 |--logfile=path | Logfile to capture operation output. | /tmp/dcp_manager.log |
-|--packages=pattern | Package name pattern to match for COPY and DELETE. | None |
+|--packages=pattern | Package name pattern to match for COPY and DELETE. | COPY=All or DELETE=None |
 |--debug | Output debug info. | False |
 |--scope | Include SCOPE format packages in COPY and CATALOG operations. | False |
 |--not_tlr | Include non-TLR named packages in COPY and CATALOG operations. | False |
