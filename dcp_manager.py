@@ -161,6 +161,11 @@ class dcp_manager():
         self.pSkip += 1
         self.logger.info("Package '" + self.package + "' is not a TRAILER and has been omitted.")
         return True
+    # If pacakges is set, choose only packages that match the pattern
+    if self.pkgPattern != 'None' and not re.match(self.pkgPattern, self.package):
+      self.pSkip += 1
+      self.logger.info("Package '" + self.package + "' does NOT match pattern '" + self.pkgPattern + "' so it has been omitted.")
+      return True
     return False
 
 
