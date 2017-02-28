@@ -17,11 +17,14 @@ This script also relies on **~/.netrc** to store and serve up protected credenti
     python dcp_manager.py CATALOG 
     
 ###Operations
-**COPY** - Copies pacakge assets from --source to --destination.
-
-**DELETE** - Removes named --packages assets from --destination.
+| Operation | Description |
+|-----------|-------------|
+| **COPY** | Copies pacakge assets from --source to --destination. Only the most recent 2D and 3D versions are copied, and SCOPE and non-TLR packages are ignored by default. |
+| **DELETE** | Removes named --packages assets from --destination.
+| **CATALOG** | Catalogs the package assets in --source to a new ASSETMAP file.
  
-**CATALOG** - Catalogs the package assets in --source to a new ASSETMAP file.
+ 
+  
  
 ###Options
 | Option | Description | Default |
