@@ -79,7 +79,7 @@ class dcp_manager():
   def parse_args(self):
     # Parse arguments
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("OPERATION", help="Specify the DCP Manager operation to perform.")
+    parser.add_argument("OPERATION", help="Specify CATALOG, COPY, or DELETE.")
     parser.add_argument("-s", "--source",
                         help="Specify the directory to perform OPERATION on. Default is " + self.SOURCE)
     parser.add_argument("-d", "--destination",
