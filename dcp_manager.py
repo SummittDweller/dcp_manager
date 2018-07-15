@@ -260,9 +260,9 @@ class dcp_manager():
         return True
     # If self.not_tlr is False, check the package name and skip it if '_TLR' is not part of the name
     if not self.not_tlr:
-      if '_TLR' not in self.package:
+      if '_TLR' not in self.package and '_FTR' not in self.package:
         self.pSkip += 1
-        self.logger.info("Package '" + self.package + "' is not a TRAILER and has been omitted.")
+        self.logger.info("Package '" + self.package + "' is not a TRAILER or FEATURE and has been omitted.")
         return True
     # If pacakges is set, choose only packages that match the pattern
     if self.pkgPattern != 'None' and not re.match(self.pkgPattern, self.package):
