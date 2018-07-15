@@ -40,12 +40,13 @@ class dcp_manager():
   #
   def main(self):
 
-    self.pCount = 0   # number of packages
-    self.aCount = 0   # number of assets found (the files exist)
-    self.aTotal = 0   # total number of assets identifed
-    self.pSkip = 0    # number of packages skipped due to missing assets or ignored format
-    self.numCopy = 0  # number of rsync copy operations performed
-    self.numDel = 0   # number of assests deleted
+    self.pCount = 0    # number of packages
+    self.aCount = 0    # number of assets found (the files exist)
+    self.aTotal = 0    # total number of assets identifed
+    self.pSkip = 0     # number of packages skipped due to missing assets or ignored format
+    self.numCopy = 0   # number of rsync copy operations performed
+    self.numDel = 0    # number of assests deleted
+    self.numFound = 0  # number of assest found during a purge
 
     self.parse_args()
     self.return_value = 0
@@ -61,6 +62,8 @@ class dcp_manager():
       out = self.copy()
     elif self.op.lower() == 'delete':
       out = self.delete()
+    elif self.op.lower() == 'purge':
+      out = self.purge()
     else:
       msg = "The specifed '" + self.op + "' is NOT supported.  Exiting..."
       self.logger.info(msg)
@@ -79,7 +82,7 @@ class dcp_manager():
   def parse_args(self):
     # Parse arguments
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("OPERATION", help="Specify CATALOG, COPY, or DELETE.")
+    parser.add_argument("OPERATION", help="Specify CATALOG, COPY, DELETE or PURGE.")
     parser.add_argument("-s", "--source",
                         help="Specify the directory to perform OPERATION on. Default is " + self.SOURCE)
     parser.add_argument("-d", "--destination",
@@ -173,6 +176,55 @@ class dcp_manager():
         self.send_mail(self.mail, self.logfile, 1, msg)
         exit(1)
 
+  # -------------------------------
+  # PURGE - Identify assets (files) with no parent (orphan) PKL.
+  #
+  # Build a list of all assets (files) and remove those that have a viable parent PKL.
+  #
+  def purge(self):
+    ## Check for an ASSETMAP file in self.dest
+    # if os.path.exists(self.destAssetXML):
+    #  self.logger.warning("Be advised, the target ASSETMAP file already exists.  It will be replaced.")
+    #  os.remove(self.destAssetXML)
+    # else:
+    #  self.logger.info("No target " + self.destAssetXML + " found so a new one will be created.")
+
+    # self.initAssetMap()  # Initialize a new empty ASSETMAP
+
+    # Find all files n the source directory
+    files = []
+
+    for root, dirnames, filenames in os.walk(self.source):
+      for filename in fnmatch.filter(filenames, '*.*'):
+        path = filename
+        files.append(path)
+        self.aCount += 1
+
+    # Find all PKL files in the source directory
+    pkls = []
+    for root, dirnames, filenames in os.walk(self.source):
+      for filename in fnmatch.filter(filenames, '[Pp][Kk][Ll]*.[Xx][Mm][Ll]'):
+        path = root + "/" + filename
+        pkls.append(path)
+
+    # Loop on the found PKL files
+    for pkl in pkls:
+      self.pkl = pkl
+      self.assets = []
+      self.package = self.fetchPKLAssets()
+      self.pCount += 1
+
+      # Loop on each package's assets and remove those found from the files[] list.
+      for a in self.assets:
+        filename = self.remove_prefix(a['file'], self.source + "/")
+        if filename in files:
+          files.remove(filename)
+          self.numFound += 1
+
+    # All done looping.  Anything left in files[] is an orphan.
+    self.logger.info(
+      "PURGE operation is complete with " + str(self.numFound) + " of " + str(
+        self.aCount) + " files found in " + str(self.pCount) + " packages.")
 
   # -------------------------------
   # CATALOG - Prepare an ASSETMAP file reflecting contents of the self.source directory.
