@@ -182,18 +182,8 @@ class dcp_manager():
   # Build a list of all assets (files) and remove those that have a viable parent PKL.
   #
   def purge(self):
-    ## Check for an ASSETMAP file in self.dest
-    # if os.path.exists(self.destAssetXML):
-    #  self.logger.warning("Be advised, the target ASSETMAP file already exists.  It will be replaced.")
-    #  os.remove(self.destAssetXML)
-    # else:
-    #  self.logger.info("No target " + self.destAssetXML + " found so a new one will be created.")
-
-    # self.initAssetMap()  # Initialize a new empty ASSETMAP
-
     # Find all files n the source directory
     files = []
-
     for root, dirnames, filenames in os.walk(self.source):
       for filename in fnmatch.filter(filenames, '*.*'):
         path = filename
@@ -221,10 +211,14 @@ class dcp_manager():
           files.remove(filename)
           self.numFound += 1
 
-    # All done looping.  Anything left in files[] is an orphan.
+    # All done looping.  Anything left in files[] is an orphan to be deleted.
+    for a in self.files:
+      path = root + "/" + a['file']
+      os.remove(path)
+      self.numDel += 1
+    
     self.logger.info(
-      "PURGE operation is complete with " + str(self.numFound) + " of " + str(
-        self.aCount) + " files found in " + str(self.pCount) + " packages.")
+      "PURGE operation is complete with {0} of {1} files found in {2} packages. {3} files were deleted.".format(self.numFound, self.aCount, self.pCount, self.numDel))
 
   # -------------------------------
   # CATALOG - Prepare an ASSETMAP file reflecting contents of the self.source directory.
