@@ -212,8 +212,8 @@ class dcp_manager():
           self.numFound += 1
 
     # All done looping.  Anything left in files[] is an orphan to be deleted.
-    for a in self.files:
-      path = root + "/" + a['file']
+    for a in files:
+      path = "/mnt/trailers/" + a
       os.remove(path)
       self.numDel += 1
     
